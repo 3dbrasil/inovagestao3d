@@ -1125,10 +1125,6 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
       createLocalRestorePoint(true);
 
       applyFullBackup(json);
-        setLocalTheme(json.brandConfig.theme || 'dark-organic');
-        setLocalIcon(json.brandConfig.icon || 'bambu');
-        setLocalCustomLogo(json.brandConfig.customLogo || '');
-      }
 
       setBackupText('');
       setShowClipboardBackup(false);
