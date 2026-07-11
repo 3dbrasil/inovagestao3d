@@ -665,6 +665,13 @@ export const CostsTab: React.FC<CostsTabProps> = ({
   const [calcFixedFee, setCalcFixedFee] = useState(5.00); // fixed sale rate (Meli, Shopee, etc)
   const [calcPercentFee, setCalcPercentFee] = useState(18.0); // percentage rate (Meli, Shopee, etc)
   const [calcAdsExpense, setCalcAdsExpense] = useState(5.00); // advertising / ad spend expense (BRL)
+  // Tax regime (MEI = flat monthly DAS, does not scale with piece; SIMPLES = % on revenue)
+  const [calcTaxRegime, setCalcTaxRegime] = useState<'MEI' | 'SIMPLES' | 'NENHUM'>('SIMPLES');
+  const [calcTaxPct, setCalcTaxPct] = useState<number>(6.0); // Simples Nacional (%)
+  // Custos operacionais por peça
+  const [calcPackagingCost, setCalcPackagingCost] = useState<number>(2.00); // embalagem/caixa por peça
+  const [calcShippingCost, setCalcShippingCost] = useState<number>(0.00);   // envio/frete por peça (quando embutido)
+  const [calcHardwareCost, setCalcHardwareCost] = useState<number>(0.50);   // rateio de insumos/hardware (bico, correias, cola)
   const [calcStockCount, setCalcStockCount] = useState(5);
   const [calcMinStockCount, setCalcMinStockCount] = useState(2);
   const [calcProdImage, setCalcProdImage] = useState('');
