@@ -1116,7 +1116,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
       const json = JSON.parse(backupText.trim());
       
       // Validation check
-      if (!json || (json.app_signature !== 'Gestao3D_Backup' && json.app_signature !== 'Bambuzau3D_Backup' && !json.clients && !json.orders)) {
+      if (!json || (json.app_signature !== 'Gestao3D_Backup' && json.app_signature !== 'Bambuzau3D_Backup' && !json.clients && !json.orders && !json.storage)) {
         showError('Texto colado não parece ser um backup válido do Gestão 3D!');
         return;
       }
@@ -1124,22 +1124,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
       // Criar ponto de restauração automático de emergência antes da importação
       createLocalRestorePoint(true);
 
-      onImportAllData({
-        clients: json.clients || [],
-        printers: json.printers || [],
-        orders: json.orders || [],
-        filamentStocks: json.filamentStocks || [],
-        expenses: json.expenses || [],
-        shoppingItems: json.shoppingItems || []
-      });
-
-      if (json.catalogItems) {
-        localStorage.setItem('bambuzau_local_catalog_production', JSON.stringify(json.catalogItems));
-      }
-
-      if (json.brandConfig) {
-        onUpdateBrandConfig(json.brandConfig);
-        setLocalName(json.brandConfig.name || 'Gestão 3D');
+      applyFullBackup(json);
         setLocalTheme(json.brandConfig.theme || 'dark-organic');
         setLocalIcon(json.brandConfig.icon || 'bambu');
         setLocalCustomLogo(json.brandConfig.customLogo || '');
