@@ -3252,6 +3252,9 @@ Utilize a nossa nova calculadora de formação de preço de produtos para obter 
                               { label: 'Potência impr. (W)', val: calcPrinterW, set: setCalcPrinterW, step: '1', hint: 'Watts médios' },
                               { label: 'Mão-de-obra (R$/h)', val: calcLaborHour, set: setCalcLaborHour, step: '0.5', hint: 'Por hora de produção' },
                               { label: 'Impostos (%)', val: calcTaxesPct, set: setCalcTaxesPct, step: '0.1', hint: 'DAS / Simples' },
+                              { label: 'Embalagem (R$)', val: calcPackagingCost, set: setCalcPackagingCost, step: '0.1', hint: 'Caixa/plástico por peça' },
+                              { label: 'Envio (R$)', val: calcShippingCost, set: setCalcShippingCost, step: '0.1', hint: 'Frete embutido' },
+                              { label: 'Insumos HW (R$)', val: calcHardwareCost, set: setCalcHardwareCost, step: '0.1', hint: 'Bico, correia, cola…' },
                             ].map((f, i) => (
                               <div key={i}>
                                 <label className="block text-[9px] uppercase tracking-wider font-bold text-[#8BA58D] mb-1">{f.label}</label>
@@ -3266,6 +3269,26 @@ Utilize a nossa nova calculadora de formação de preço de produtos para obter 
                                 <div className="text-[9px] text-white/30 mt-0.5">{f.hint}</div>
                               </div>
                             ))}
+                          </div>
+                          {/* Regime tributário */}
+                          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#232B27]">
+                            <div>
+                              <label className="block text-[9px] uppercase tracking-wider font-bold text-fuchsia-400 mb-1">Regime tributário</label>
+                              <select value={calcTaxRegime}
+                                onChange={e => setCalcTaxRegime(e.target.value as any)}
+                                className="w-full px-2 py-1.5 rounded-lg bg-black/40 border border-[#232B27] text-white text-xs">
+                                <option value="MEI">MEI (DAS fixo)</option>
+                                <option value="SIMPLES">Simples Nacional</option>
+                                <option value="NENHUM">Sem imposto</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-[9px] uppercase tracking-wider font-bold text-fuchsia-400 mb-1">Alíquota (%)</label>
+                              <input type="number" step="0.1" min="0" value={calcTaxPct}
+                                disabled={calcTaxRegime !== 'SIMPLES'}
+                                onChange={e => setCalcTaxPct(parseFloat(e.target.value) || 0)}
+                                className="w-full px-2 py-1.5 rounded-lg bg-black/40 border border-[#232B27] text-white text-xs disabled:opacity-40" />
+                            </div>
                           </div>
                           <div>
                             <div className="flex items-center justify-between mb-1">
@@ -3300,7 +3323,10 @@ Utilize a nossa nova calculadora de formação de preço de produtos para obter 
                               { l: 'Energia', v: energy },
                               { l: 'Mão-de-obra', v: labor },
                               { l: `Marketplace (${mktAvgPct.toFixed(1)}%)`, v: mktFee },
-                              { l: `Impostos (${(Number(calcTaxesPct)||0).toFixed(1)}%)`, v: taxes },
+                              { l: `Impostos (${taxRatePct.toFixed(1)}%)`, v: taxes },
+                              { l: 'Embalagem', v: packagingP },
+                              { l: 'Envio', v: shippingP },
+                              { l: 'Insumos HW', v: hardwareP },
                             ].map((b, i) => (
                               <div key={i} className="rounded-lg bg-white/[0.02] border border-[#232B27] px-2 py-1.5">
                                 <div className="text-[9px] uppercase tracking-wider text-[#8BA58D] font-bold">{b.l}</div>
