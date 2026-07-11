@@ -906,20 +906,27 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   // 1. Export Data to JSON
   const handleExportData = () => {
     try {
-      let localCatalog = [];
+      // Snapshot ALL persisted app state: every localStorage entry the app owns
+      // (bambuzau_*, gestao3d_*, catalog, api keys, tuya devices, brand/logo, etc.)
+      const storageDump: Record<string, string> = {};
       try {
-        const savedCatalog = localStorage.getItem('bambuzau_local_catalog_production');
-        if (savedCatalog) {
-          localCatalog = JSON.parse(savedCatalog);
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (!k) continue;
+          // Skip transient UI flags that must not be restored
+          if (k === 'bambuzau_open_product_form_pending') continue;
+          const v = localStorage.getItem(k);
+          if (v !== null) storageDump[k] = v;
         }
       } catch (e) {
-        console.warn("Could not read local catalog on export:", e);
+        console.warn('Falha ao ler localStorage:', e);
       }
 
       const exportObject = {
         app_signature: 'Gestao3D_Backup',
-        version: '3.3.0.4',
+        version: '3.4.0',
         timestamp: Date.now(),
+        // In-memory React state (kept for backward compat with older restores)
         clients: clients || [],
         printers: printers || [],
         orders: orders || [],
@@ -927,7 +934,12 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
         expenses: expenses || [],
         shoppingItems: shoppingItems || [],
         brandConfig: brandConfig || {},
-        catalogItems: localCatalog
+        catalogItems: (() => {
+          try { return JSON.parse(localStorage.getItem('bambuzau_local_catalog_production') || '[]'); }
+          catch { return []; }
+        })(),
+        // Full storage dump — restores everything: keys, insumos, logo, tuya, cotações…
+        storage: storageDump,
       };
 
       const jsonBackupText = JSON.stringify(exportObject, null, 2);
