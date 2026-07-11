@@ -523,6 +523,59 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
     }
   };
 
+  // Restaura backup completo: reescreve todo o localStorage e recarrega a página
+  // para que cada módulo releia produtos, insumos, keys, logo, tuya, cotações…
+  const applyFullBackup = (json: any) => {
+    try {
+      // 1) Preferencial: dump completo do localStorage
+      if (json.storage && typeof json.storage === 'object') {
+        // Preserva chaves críticas que NÃO devem ser sobrescritas (autenticação atual etc.)
+        const preserveKeys = new Set<string>([
+          'bambuzau_rollback_snapshot',
+          'bambuzau_open_product_form_pending',
+        ]);
+        const preserved: Record<string, string | null> = {};
+        preserveKeys.forEach((k) => { preserved[k] = localStorage.getItem(k); });
+
+        try { localStorage.clear(); } catch {}
+
+        Object.entries(json.storage as Record<string, string>).forEach(([k, v]) => {
+          try { localStorage.setItem(k, String(v)); } catch (e) { console.warn('skip', k, e); }
+        });
+
+        Object.entries(preserved).forEach(([k, v]) => {
+          if (v !== null && !json.storage[k]) {
+            try { localStorage.setItem(k, v); } catch {}
+          }
+        });
+      } else {
+        // 2) Fallback (backups antigos sem `storage`): grava por chave conhecida
+        const pairs: Array<[string, any]> = [
+          ['bambuzau_clients', json.clients],
+          ['bambuzau_printers', json.printers],
+          ['bambuzau_orders', json.orders],
+          ['bambuzau_filament', json.filamentStocks],
+          ['bambuzau_expenses', json.expenses],
+          ['bambuzau_shopping', json.shoppingItems],
+          ['bambuzau_supplies', json.suppliesStocks],
+          ['bambuzau_local_catalog_production', json.catalogItems],
+          ['bambuzau_tuya_devices', json.tuyaDevices],
+          ['bambuzau_brand_config', json.brandConfig],
+        ];
+        pairs.forEach(([k, v]) => {
+          if (v !== undefined && v !== null) {
+            try { localStorage.setItem(k, typeof v === 'string' ? v : JSON.stringify(v)); } catch {}
+          }
+        });
+      }
+
+      showSuccess('Backup restaurado! Recarregando aplicativo para aplicar produtos, estoques, chaves e logo…');
+      setTimeout(() => { try { window.location.reload(); } catch {} }, 900);
+    } catch (err: any) {
+      showError('Falha ao restaurar backup completo: ' + (err?.message || err));
+    }
+  };
+
   const handleRollback = () => {
     if (!rollbackSnapshot) {
       showError('Nenhum backup disponível para retorno.');
@@ -906,20 +959,27 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   // 1. Export Data to JSON
   const handleExportData = () => {
     try {
-      let localCatalog = [];
+      // Snapshot ALL persisted app state: every localStorage entry the app owns
+      // (bambuzau_*, gestao3d_*, catalog, api keys, tuya devices, brand/logo, etc.)
+      const storageDump: Record<string, string> = {};
       try {
-        const savedCatalog = localStorage.getItem('bambuzau_local_catalog_production');
-        if (savedCatalog) {
-          localCatalog = JSON.parse(savedCatalog);
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (!k) continue;
+          // Skip transient UI flags that must not be restored
+          if (k === 'bambuzau_open_product_form_pending') continue;
+          const v = localStorage.getItem(k);
+          if (v !== null) storageDump[k] = v;
         }
       } catch (e) {
-        console.warn("Could not read local catalog on export:", e);
+        console.warn('Falha ao ler localStorage:', e);
       }
 
       const exportObject = {
         app_signature: 'Gestao3D_Backup',
-        version: '3.3.0.4',
+        version: '3.4.0',
         timestamp: Date.now(),
+        // In-memory React state (kept for backward compat with older restores)
         clients: clients || [],
         printers: printers || [],
         orders: orders || [],
@@ -927,7 +987,12 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
         expenses: expenses || [],
         shoppingItems: shoppingItems || [],
         brandConfig: brandConfig || {},
-        catalogItems: localCatalog
+        catalogItems: (() => {
+          try { return JSON.parse(localStorage.getItem('bambuzau_local_catalog_production') || '[]'); }
+          catch { return []; }
+        })(),
+        // Full storage dump — restores everything: keys, insumos, logo, tuya, cotações…
+        storage: storageDump,
       };
 
       const jsonBackupText = JSON.stringify(exportObject, null, 2);
@@ -990,7 +1055,8 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
           Array.isArray(json.clients) ||
           Array.isArray(json.orders) ||
           Array.isArray(json.printers) ||
-          Array.isArray(json.filamentStocks)
+          Array.isArray(json.filamentStocks) ||
+          (json.storage && typeof json.storage === 'object')
         );
 
         if (!isValidBackup) {
@@ -998,28 +1064,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
           return;
         }
 
-        onImportAllData({
-          clients: json.clients || [],
-          printers: json.printers || [],
-          orders: json.orders || [],
-          filamentStocks: json.filamentStocks || [],
-          expenses: json.expenses || [],
-          shoppingItems: json.shoppingItems || []
-        });
-
-        if (json.catalogItems) {
-          localStorage.setItem('bambuzau_local_catalog_production', JSON.stringify(json.catalogItems));
-        }
-
-        if (json.brandConfig) {
-          onUpdateBrandConfig(json.brandConfig);
-          setLocalName(json.brandConfig.name || 'Gestão 3D');
-          setLocalTheme(json.brandConfig.theme || 'dark-organic');
-          setLocalIcon(json.brandConfig.icon || 'bambu');
-          setLocalCustomLogo(json.brandConfig.customLogo || '');
-        }
-
-        showSuccess('Banco de dados restaurado com sucesso! Todas as informações foram sincronizadas.');
+        applyFullBackup(json);
       } catch (err: any) {
         showError('Erro ao processar as informações do arquivo: ' + err.message);
       }
@@ -1124,7 +1169,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
       const json = JSON.parse(backupText.trim());
       
       // Validation check
-      if (!json || (json.app_signature !== 'Gestao3D_Backup' && json.app_signature !== 'Bambuzau3D_Backup' && !json.clients && !json.orders)) {
+      if (!json || (json.app_signature !== 'Gestao3D_Backup' && json.app_signature !== 'Bambuzau3D_Backup' && !json.clients && !json.orders && !json.storage)) {
         showError('Texto colado não parece ser um backup válido do Gestão 3D!');
         return;
       }
@@ -1132,26 +1177,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
       // Criar ponto de restauração automático de emergência antes da importação
       createLocalRestorePoint(true);
 
-      onImportAllData({
-        clients: json.clients || [],
-        printers: json.printers || [],
-        orders: json.orders || [],
-        filamentStocks: json.filamentStocks || [],
-        expenses: json.expenses || [],
-        shoppingItems: json.shoppingItems || []
-      });
-
-      if (json.catalogItems) {
-        localStorage.setItem('bambuzau_local_catalog_production', JSON.stringify(json.catalogItems));
-      }
-
-      if (json.brandConfig) {
-        onUpdateBrandConfig(json.brandConfig);
-        setLocalName(json.brandConfig.name || 'Gestão 3D');
-        setLocalTheme(json.brandConfig.theme || 'dark-organic');
-        setLocalIcon(json.brandConfig.icon || 'bambu');
-        setLocalCustomLogo(json.brandConfig.customLogo || '');
-      }
+      applyFullBackup(json);
 
       setBackupText('');
       setShowClipboardBackup(false);
