@@ -2360,6 +2360,47 @@ Utilize a nossa nova calculadora de formação de preço de produtos para obter 
               </div>
             </div>
 
+            {/* Custos operacionais adicionais + Regime tributário */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 bg-[#0C0E0D]/40 p-3.5 border border-[#232B27] rounded-2xl">
+              <div className="space-y-1">
+                <label className="block text-[9px] text-sky-400 uppercase font-bold">Embalagem ($/peça)</label>
+                <input type="number" step="0.1" min="0" value={calcPackagingCost}
+                  onChange={(e) => setCalcPackagingCost(parseFloat(e.target.value) || 0)}
+                  className="w-full bg-[#0C0E0D] border border-[#232B27] rounded-xl px-2.5 py-1.5 text-xs text-white font-mono" />
+              </div>
+              <div className="space-y-1">
+                <label className="block text-[9px] text-sky-400 uppercase font-bold">Envio ($/peça)</label>
+                <input type="number" step="0.1" min="0" value={calcShippingCost}
+                  onChange={(e) => setCalcShippingCost(parseFloat(e.target.value) || 0)}
+                  className="w-full bg-[#0C0E0D] border border-[#232B27] rounded-xl px-2.5 py-1.5 text-xs text-white font-mono" />
+              </div>
+              <div className="space-y-1">
+                <label className="block text-[9px] text-sky-400 uppercase font-bold">Insumos HW ($/peça)</label>
+                <input type="number" step="0.1" min="0" value={calcHardwareCost}
+                  onChange={(e) => setCalcHardwareCost(parseFloat(e.target.value) || 0)}
+                  className="w-full bg-[#0C0E0D] border border-[#232B27] rounded-xl px-2.5 py-1.5 text-xs text-white font-mono"
+                  title="Rateio de bicos, correias, cola, lixa, hotend etc." />
+              </div>
+              <div className="space-y-1">
+                <label className="block text-[9px] text-fuchsia-400 uppercase font-bold">Regime Tributário</label>
+                <select value={calcTaxRegime}
+                  onChange={(e) => setCalcTaxRegime(e.target.value as any)}
+                  className="w-full bg-[#0C0E0D] border border-[#232B27] rounded-xl px-2 py-1.5 text-xs text-white">
+                  <option value="MEI">MEI (DAS fixo)</option>
+                  <option value="SIMPLES">Simples Nacional (%)</option>
+                  <option value="NENHUM">Sem imposto</option>
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="block text-[9px] text-fuchsia-400 uppercase font-bold">Imposto (%)</label>
+                <input type="number" step="0.1" min="0" value={calcTaxPct}
+                  disabled={calcTaxRegime !== 'SIMPLES'}
+                  onChange={(e) => setCalcTaxPct(parseFloat(e.target.value) || 0)}
+                  className="w-full bg-[#0C0E0D] border border-[#232B27] rounded-xl px-2.5 py-1.5 text-xs text-white font-mono disabled:opacity-40" />
+                <div className="text-[8px] text-white/40">{calcTaxRegime === 'MEI' ? 'MEI: DAS mensal fixo — n/a por peça' : calcTaxRegime === 'SIMPLES' ? 'Simples: alíquota sobre a venda' : 'Sem imposto sobre venda'}</div>
+              </div>
+            </div>
+
           </div>
 
           {/* Precision Calculation outputs */}
