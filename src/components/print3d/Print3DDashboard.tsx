@@ -6,6 +6,7 @@ import { LIME } from "./parts/constants";
 import { fmtBRL } from "./parts/utils";
 import { Sidebar, TopBar } from "./parts/Chrome";
 import { ClientsMap } from "./parts/ClientsMap";
+import { ChangelogPanel } from "./parts/Changelog";
 import {
   LivePrinters, OrdersList, Hygrometers, StlGallery, StockOverview,
   FilamentQuotes, AiPricing, TopProductsChart, HourlyChart, FinanceSummary,
@@ -133,23 +134,26 @@ export function Print3DPanel({
         <FinanceSummary revenue={monthRevenue} expense={monthExpenses} profit={monthProfit} margin={monthMargin} onSelectTab={onSelectTab} />
       </div>
 
-      {/* Row 5: Mapa de Clientes */}
-      <section
-        id="dashboard-client-map-bottom"
-        className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#050908] shadow-[0_28px_80px_-34px_rgba(163,230,53,0.45)]"
-      >
-        <div className="flex items-center justify-between gap-3 border-b border-white/[0.06] bg-[#0a0d0c]/95 px-5 py-4">
-          <div>
-            <div className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: LIME }}>Aqui embaixo</div>
-            <h3 className="text-[18px] font-bold text-white">Mapa de Clientes</h3>
-            <p className="text-[11px] text-white/45">{clients.length} clientes cadastrados</p>
+      {/* Row 5: Mapa (mais estreito) + Painel de Atualizações */}
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] gap-4 items-stretch">
+        <section
+          id="dashboard-client-map-bottom"
+          className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#050908] shadow-[0_28px_80px_-34px_rgba(163,230,53,0.45)]"
+        >
+          <div className="flex items-center justify-between gap-3 border-b border-white/[0.06] bg-[#0a0d0c]/95 px-5 py-4">
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: LIME }}>Aqui embaixo</div>
+              <h3 className="text-[18px] font-bold text-white">Mapa de Clientes</h3>
+              <p className="text-[11px] text-white/45">{clients.length} clientes cadastrados</p>
+            </div>
           </div>
-        </div>
-        <div className="relative h-[calc(100vh-120px)] min-h-[720px] w-full bg-[#050908]">
-          <div className="absolute inset-0 grid place-items-center text-[12px] text-white/35">Carregando mapa...</div>
-          <ClientsMap clients={clients} />
-        </div>
-      </section>
+          <div className="relative h-[calc(100vh-120px)] min-h-[720px] w-full bg-[#050908]">
+            <div className="absolute inset-0 grid place-items-center text-[12px] text-white/35">Carregando mapa...</div>
+            <ClientsMap clients={clients} />
+          </div>
+        </section>
+        <ChangelogPanel />
+      </div>
     </div>
   );
 }
