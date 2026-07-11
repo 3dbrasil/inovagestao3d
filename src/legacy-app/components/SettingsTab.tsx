@@ -523,6 +523,59 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
     }
   };
 
+  // Restaura backup completo: reescreve todo o localStorage e recarrega a página
+  // para que cada módulo releia produtos, insumos, keys, logo, tuya, cotações…
+  const applyFullBackup = (json: any) => {
+    try {
+      // 1) Preferencial: dump completo do localStorage
+      if (json.storage && typeof json.storage === 'object') {
+        // Preserva chaves críticas que NÃO devem ser sobrescritas (autenticação atual etc.)
+        const preserveKeys = new Set<string>([
+          'bambuzau_rollback_snapshot',
+          'bambuzau_open_product_form_pending',
+        ]);
+        const preserved: Record<string, string | null> = {};
+        preserveKeys.forEach((k) => { preserved[k] = localStorage.getItem(k); });
+
+        try { localStorage.clear(); } catch {}
+
+        Object.entries(json.storage as Record<string, string>).forEach(([k, v]) => {
+          try { localStorage.setItem(k, String(v)); } catch (e) { console.warn('skip', k, e); }
+        });
+
+        Object.entries(preserved).forEach(([k, v]) => {
+          if (v !== null && !json.storage[k]) {
+            try { localStorage.setItem(k, v); } catch {}
+          }
+        });
+      } else {
+        // 2) Fallback (backups antigos sem `storage`): grava por chave conhecida
+        const pairs: Array<[string, any]> = [
+          ['bambuzau_clients', json.clients],
+          ['bambuzau_printers', json.printers],
+          ['bambuzau_orders', json.orders],
+          ['bambuzau_filament', json.filamentStocks],
+          ['bambuzau_expenses', json.expenses],
+          ['bambuzau_shopping', json.shoppingItems],
+          ['bambuzau_supplies', json.suppliesStocks],
+          ['bambuzau_local_catalog_production', json.catalogItems],
+          ['bambuzau_tuya_devices', json.tuyaDevices],
+          ['bambuzau_brand_config', json.brandConfig],
+        ];
+        pairs.forEach(([k, v]) => {
+          if (v !== undefined && v !== null) {
+            try { localStorage.setItem(k, typeof v === 'string' ? v : JSON.stringify(v)); } catch {}
+          }
+        });
+      }
+
+      showSuccess('Backup restaurado! Recarregando aplicativo para aplicar produtos, estoques, chaves e logo…');
+      setTimeout(() => { try { window.location.reload(); } catch {} }, 900);
+    } catch (err: any) {
+      showError('Falha ao restaurar backup completo: ' + (err?.message || err));
+    }
+  };
+
   const handleRollback = () => {
     if (!rollbackSnapshot) {
       showError('Nenhum backup disponível para retorno.');
