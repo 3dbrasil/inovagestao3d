@@ -2443,6 +2443,19 @@ Utilize a nossa nova calculadora de formação de preço de produtos para obter 
                   <span className="font-mono text-[#F1F4EE]">R$ {calcAdsExpense.toFixed(2)}</span>
                 </div>
 
+                <div className="flex justify-between items-center py-1 border-b border-[#232B27]/40">
+                  <span className="text-[#8BA58D]">Embalagem:</span>
+                  <span className="font-mono text-[#F1F4EE]">R$ {packagingCost.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center py-1 border-b border-[#232B27]/40">
+                  <span className="text-[#8BA58D]">Envio / Frete:</span>
+                  <span className="font-mono text-[#F1F4EE]">R$ {shippingCost.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center py-1 border-b border-[#232B27]/40">
+                  <span className="text-[#8BA58D]">Insumos de Hardware (rateio):</span>
+                  <span className="font-mono text-[#F1F4EE]">R$ {hardwareCost.toFixed(2)}</span>
+                </div>
+
                 <div className="flex justify-between items-center p-2.5 bg-black/30 rounded-xl">
                   <span className="text-xs text-[#8BA58D] font-bold uppercase tracking-wider">Custo de Fabricação Direto:</span>
                   <span className="font-mono text-xs font-black text-[#F1F4EE]">R$ {directMachineCost.toFixed(2)}</span>
@@ -2451,6 +2464,11 @@ Utilize a nossa nova calculadora de formação de preço de produtos para obter 
                 <div className="flex justify-between items-center py-1 border-b border-[#151917]">
                   <span className="text-[#8BA58D] italic">Comissão do Canal Marketplace ({calcPercentFee}% + R$ {calcFixedFee.toFixed(2)}):</span>
                   <span className="font-mono text-red-400">R$ {commissionPaidToMarketplace.toFixed(2)}</span>
+                </div>
+
+                <div className="flex justify-between items-center py-1 border-b border-[#151917]">
+                  <span className="text-[#8BA58D] italic">Impostos ({calcTaxRegime === 'SIMPLES' ? `Simples ${calcTaxPct}%` : calcTaxRegime === 'MEI' ? 'MEI (DAS mensal)' : 'sem imposto'}):</span>
+                  <span className="font-mono text-red-400">R$ {taxesPaid.toFixed(2)}</span>
                 </div>
 
                 <div className="flex justify-between items-center py-1">
