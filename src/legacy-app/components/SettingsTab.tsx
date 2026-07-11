@@ -1002,7 +1002,8 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
           Array.isArray(json.clients) ||
           Array.isArray(json.orders) ||
           Array.isArray(json.printers) ||
-          Array.isArray(json.filamentStocks)
+          Array.isArray(json.filamentStocks) ||
+          (json.storage && typeof json.storage === 'object')
         );
 
         if (!isValidBackup) {
@@ -1010,28 +1011,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
           return;
         }
 
-        onImportAllData({
-          clients: json.clients || [],
-          printers: json.printers || [],
-          orders: json.orders || [],
-          filamentStocks: json.filamentStocks || [],
-          expenses: json.expenses || [],
-          shoppingItems: json.shoppingItems || []
-        });
-
-        if (json.catalogItems) {
-          localStorage.setItem('bambuzau_local_catalog_production', JSON.stringify(json.catalogItems));
-        }
-
-        if (json.brandConfig) {
-          onUpdateBrandConfig(json.brandConfig);
-          setLocalName(json.brandConfig.name || 'Gestão 3D');
-          setLocalTheme(json.brandConfig.theme || 'dark-organic');
-          setLocalIcon(json.brandConfig.icon || 'bambu');
-          setLocalCustomLogo(json.brandConfig.customLogo || '');
-        }
-
-        showSuccess('Banco de dados restaurado com sucesso! Todas as informações foram sincronizadas.');
+        applyFullBackup(json);
       } catch (err: any) {
         showError('Erro ao processar as informações do arquivo: ' + err.message);
       }
