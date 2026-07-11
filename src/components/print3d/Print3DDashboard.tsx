@@ -1,4 +1,5 @@
 import { DollarSign, Clock, Package2, ShoppingBag, Users, TrendingUp } from "lucide-react";
+import { useEffect, useState } from "react";
 import dashboardHero from "@/assets/dashboard-hero-printer.jpg.asset.json";
 import { Kpi as PremiumKpi } from "@/legacy-app/components/DashboardShell";
 import { LIME } from "./parts/constants";
@@ -46,6 +47,24 @@ export function Print3DPanel({
     topProducts, hourly,
   } = usePanelData(orders, printers, expenses, clients);
 
+  const [brandName, setBrandName] = useState<string>(() => {
+    try {
+      const raw = typeof window !== 'undefined' ? localStorage.getItem('bambuzau_brand_config') : null;
+      return (raw && JSON.parse(raw)?.name) || 'Gestão 3D';
+    } catch { return 'Gestão 3D'; }
+  });
+  useEffect(() => {
+    const sync = () => {
+      try {
+        const raw = localStorage.getItem('bambuzau_brand_config');
+        if (raw) setBrandName(JSON.parse(raw)?.name || 'Gestão 3D');
+      } catch {}
+    };
+    window.addEventListener('storage', sync);
+    const id = window.setInterval(sync, 1500);
+    return () => { window.removeEventListener('storage', sync); window.clearInterval(id); };
+  }, []);
+
   return (
     <div className="space-y-2 text-white">
       {/* Hero + KPI strip — image fades down into dashboard */}
@@ -66,7 +85,7 @@ export function Print3DPanel({
             <div>
               <h1 className="font-bold tracking-tight text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.6)] flex flex-wrap items-baseline gap-x-2">
                 <span className="text-[22px] lg:text-[26px]">Bem-vindo de volta,</span>
-                <span className="text-[30px] lg:text-[38px] font-extrabold text-sky-400 drop-shadow-[0_2px_12px_rgba(56,189,248,0.45)]">Inova Mundo!</span>
+                <span className="text-[30px] lg:text-[38px] font-extrabold text-sky-400 drop-shadow-[0_2px_12px_rgba(56,189,248,0.45)]">{brandName}!</span>
                 <span className="inline-block text-[26px]">👋</span>
               </h1>
               <p className="text-[12.5px] lg:text-[13px] text-white/70">Aqui está o resumo da sua produção hoje.</p>
