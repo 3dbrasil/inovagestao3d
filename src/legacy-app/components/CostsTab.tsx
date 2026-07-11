@@ -3178,8 +3178,14 @@ Utilize a nossa nova calculadora de formação de preço de produtos para obter 
                   (Number(calcMktTikTok) || 0)
                 ) / 4;
                 const mktFee = price * (mktAvgPct / 100);
-                const taxes = price * ((Number(calcTaxesPct) || 0) / 100);
-                const extra = fixedFee + energy + labor + mktFee + taxes;
+                const taxRatePct = calcTaxRegime === 'SIMPLES'
+                  ? (Number(calcTaxPct) || 0)
+                  : calcTaxRegime === 'NENHUM' ? 0 : (Number(calcTaxesPct) || 0);
+                const taxes = price * (taxRatePct / 100);
+                const packagingP = Number(calcPackagingCost) || 0;
+                const shippingP  = Number(calcShippingCost)  || 0;
+                const hardwareP  = Number(calcHardwareCost)  || 0;
+                const extra = fixedFee + energy + labor + mktFee + taxes + packagingP + shippingP + hardwareP;
                 // mantém manualProdExtraCost sincronizado para persistir no produto
                 if (Math.abs((Number(manualProdExtraCost) || 0) - extra) > 0.005) {
                   setTimeout(() => setManualProdExtraCost(Number(extra.toFixed(2))), 0);
