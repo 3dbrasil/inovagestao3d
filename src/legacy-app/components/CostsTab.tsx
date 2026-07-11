@@ -1547,18 +1547,27 @@ export const CostsTab: React.FC<CostsTabProps> = ({
   }, 0);
 
   // Custo Direto de Fabricação
-  const directMachineCost = rawMaterialCost + electricityCost + laborCost + extraSuppliesCost + calcAdsExpense;
+  const packagingCost = Number(calcPackagingCost) || 0;
+  const shippingCost = Number(calcShippingCost) || 0;
+  const hardwareCost = Number(calcHardwareCost) || 0;
+  const directMachineCost = rawMaterialCost + electricityCost + laborCost + extraSuppliesCost + calcAdsExpense + packagingCost + shippingCost + hardwareCost;
 
   // Preço de venda comercial estipulando markup sem custos de marketplace
   const markupMultiplier = 1 + (calcMargin / 100);
   const baselineDesiredPrice = directMachineCost * markupMultiplier;
 
-  // Engenharia Precificação Reversa dos Marketplaces
-  // Preço Final = (PreçoBase + TaxaFixa) / (1 - TaxaPercent / 100)
+  // Engenharia Precificação Reversa dos Marketplaces + Impostos
+  // Preço Final = (PreçoBase + TaxaFixa) / (1 - TaxaPercent/100 - Imposto%/100)
+  // Para MEI o imposto é DAS mensal fixo — não escala por peça, então taxOnSaleRate = 0.
   const safePercentRate = Math.min(95, Math.max(0, calcPercentFee)) / 100;
-  const finalPriceSuggested = (baselineDesiredPrice + calcFixedFee) / (1 - safePercentRate);
+  const taxOnSaleRate = calcTaxRegime === 'SIMPLES'
+    ? Math.min(30, Math.max(0, Number(calcTaxPct) || 0)) / 100
+    : 0;
+  const combinedDeduction = Math.min(0.95, safePercentRate + taxOnSaleRate);
+  const finalPriceSuggested = (baselineDesiredPrice + calcFixedFee) / (1 - combinedDeduction);
   const commissionPaidToMarketplace = (finalPriceSuggested * safePercentRate) + calcFixedFee;
-  const netEarningsProfit = finalPriceSuggested - commissionPaidToMarketplace - directMachineCost;
+  const taxesPaid = finalPriceSuggested * taxOnSaleRate;
+  const netEarningsProfit = finalPriceSuggested - commissionPaidToMarketplace - taxesPaid - directMachineCost;
 
   const handleSaveToCatalog = () => {
     if (!calcProdName.trim()) {
