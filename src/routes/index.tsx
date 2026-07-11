@@ -8,7 +8,7 @@ export const Route = createFileRoute("/")({
       { title: "Gestão 3D — Ateliê 3D Hub" },
       { name: "description", content: "Sistema completo de gestão para ateliês de impressão 3D: produção, CRM, custos, integrações e vitrine." },
       { property: "og:title", content: "Gestão 3D — Ateliê 3D Hub" },
-      { property: "og:description", content: "Sistema completo de gestão para ateliês de impressão 3D." },
+      { property: "og:description", content: "Sistema completo de gestão para ateliês de impressão 3D: produção, CRM, custos, integrações e vitrine." },
     ],
   }),
   component: Index,
