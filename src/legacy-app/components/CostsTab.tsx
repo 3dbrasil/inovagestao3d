@@ -665,6 +665,13 @@ export const CostsTab: React.FC<CostsTabProps> = ({
   const [calcFixedFee, setCalcFixedFee] = useState(5.00); // fixed sale rate (Meli, Shopee, etc)
   const [calcPercentFee, setCalcPercentFee] = useState(18.0); // percentage rate (Meli, Shopee, etc)
   const [calcAdsExpense, setCalcAdsExpense] = useState(5.00); // advertising / ad spend expense (BRL)
+  // Tax regime (MEI = flat monthly DAS, does not scale with piece; SIMPLES = % on revenue)
+  const [calcTaxRegime, setCalcTaxRegime] = useState<'MEI' | 'SIMPLES' | 'NENHUM'>('SIMPLES');
+  const [calcTaxPct, setCalcTaxPct] = useState<number>(6.0); // Simples Nacional (%)
+  // Custos operacionais por peça
+  const [calcPackagingCost, setCalcPackagingCost] = useState<number>(2.00); // embalagem/caixa por peça
+  const [calcShippingCost, setCalcShippingCost] = useState<number>(0.00);   // envio/frete por peça (quando embutido)
+  const [calcHardwareCost, setCalcHardwareCost] = useState<number>(0.50);   // rateio de insumos/hardware (bico, correias, cola)
   const [calcStockCount, setCalcStockCount] = useState(5);
   const [calcMinStockCount, setCalcMinStockCount] = useState(2);
   const [calcProdImage, setCalcProdImage] = useState('');
@@ -1540,18 +1547,27 @@ export const CostsTab: React.FC<CostsTabProps> = ({
   }, 0);
 
   // Custo Direto de Fabricação
-  const directMachineCost = rawMaterialCost + electricityCost + laborCost + extraSuppliesCost + calcAdsExpense;
+  const packagingCost = Number(calcPackagingCost) || 0;
+  const shippingCost = Number(calcShippingCost) || 0;
+  const hardwareCost = Number(calcHardwareCost) || 0;
+  const directMachineCost = rawMaterialCost + electricityCost + laborCost + extraSuppliesCost + calcAdsExpense + packagingCost + shippingCost + hardwareCost;
 
   // Preço de venda comercial estipulando markup sem custos de marketplace
   const markupMultiplier = 1 + (calcMargin / 100);
   const baselineDesiredPrice = directMachineCost * markupMultiplier;
 
-  // Engenharia Precificação Reversa dos Marketplaces
-  // Preço Final = (PreçoBase + TaxaFixa) / (1 - TaxaPercent / 100)
+  // Engenharia Precificação Reversa dos Marketplaces + Impostos
+  // Preço Final = (PreçoBase + TaxaFixa) / (1 - TaxaPercent/100 - Imposto%/100)
+  // Para MEI o imposto é DAS mensal fixo — não escala por peça, então taxOnSaleRate = 0.
   const safePercentRate = Math.min(95, Math.max(0, calcPercentFee)) / 100;
-  const finalPriceSuggested = (baselineDesiredPrice + calcFixedFee) / (1 - safePercentRate);
+  const taxOnSaleRate = calcTaxRegime === 'SIMPLES'
+    ? Math.min(30, Math.max(0, Number(calcTaxPct) || 0)) / 100
+    : 0;
+  const combinedDeduction = Math.min(0.95, safePercentRate + taxOnSaleRate);
+  const finalPriceSuggested = (baselineDesiredPrice + calcFixedFee) / (1 - combinedDeduction);
   const commissionPaidToMarketplace = (finalPriceSuggested * safePercentRate) + calcFixedFee;
-  const netEarningsProfit = finalPriceSuggested - commissionPaidToMarketplace - directMachineCost;
+  const taxesPaid = finalPriceSuggested * taxOnSaleRate;
+  const netEarningsProfit = finalPriceSuggested - commissionPaidToMarketplace - taxesPaid - directMachineCost;
 
   const handleSaveToCatalog = () => {
     if (!calcProdName.trim()) {
@@ -2344,6 +2360,47 @@ Utilize a nossa nova calculadora de formação de preço de produtos para obter 
               </div>
             </div>
 
+            {/* Custos operacionais adicionais + Regime tributário */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 bg-[#0C0E0D]/40 p-3.5 border border-[#232B27] rounded-2xl">
+              <div className="space-y-1">
+                <label className="block text-[9px] text-sky-400 uppercase font-bold">Embalagem ($/peça)</label>
+                <input type="number" step="0.1" min="0" value={calcPackagingCost}
+                  onChange={(e) => setCalcPackagingCost(parseFloat(e.target.value) || 0)}
+                  className="w-full bg-[#0C0E0D] border border-[#232B27] rounded-xl px-2.5 py-1.5 text-xs text-white font-mono" />
+              </div>
+              <div className="space-y-1">
+                <label className="block text-[9px] text-sky-400 uppercase font-bold">Envio ($/peça)</label>
+                <input type="number" step="0.1" min="0" value={calcShippingCost}
+                  onChange={(e) => setCalcShippingCost(parseFloat(e.target.value) || 0)}
+                  className="w-full bg-[#0C0E0D] border border-[#232B27] rounded-xl px-2.5 py-1.5 text-xs text-white font-mono" />
+              </div>
+              <div className="space-y-1">
+                <label className="block text-[9px] text-sky-400 uppercase font-bold">Insumos HW ($/peça)</label>
+                <input type="number" step="0.1" min="0" value={calcHardwareCost}
+                  onChange={(e) => setCalcHardwareCost(parseFloat(e.target.value) || 0)}
+                  className="w-full bg-[#0C0E0D] border border-[#232B27] rounded-xl px-2.5 py-1.5 text-xs text-white font-mono"
+                  title="Rateio de bicos, correias, cola, lixa, hotend etc." />
+              </div>
+              <div className="space-y-1">
+                <label className="block text-[9px] text-fuchsia-400 uppercase font-bold">Regime Tributário</label>
+                <select value={calcTaxRegime}
+                  onChange={(e) => setCalcTaxRegime(e.target.value as any)}
+                  className="w-full bg-[#0C0E0D] border border-[#232B27] rounded-xl px-2 py-1.5 text-xs text-white">
+                  <option value="MEI">MEI (DAS fixo)</option>
+                  <option value="SIMPLES">Simples Nacional (%)</option>
+                  <option value="NENHUM">Sem imposto</option>
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="block text-[9px] text-fuchsia-400 uppercase font-bold">Imposto (%)</label>
+                <input type="number" step="0.1" min="0" value={calcTaxPct}
+                  disabled={calcTaxRegime !== 'SIMPLES'}
+                  onChange={(e) => setCalcTaxPct(parseFloat(e.target.value) || 0)}
+                  className="w-full bg-[#0C0E0D] border border-[#232B27] rounded-xl px-2.5 py-1.5 text-xs text-white font-mono disabled:opacity-40" />
+                <div className="text-[8px] text-white/40">{calcTaxRegime === 'MEI' ? 'MEI: DAS mensal fixo — n/a por peça' : calcTaxRegime === 'SIMPLES' ? 'Simples: alíquota sobre a venda' : 'Sem imposto sobre venda'}</div>
+              </div>
+            </div>
+
           </div>
 
           {/* Precision Calculation outputs */}
@@ -2386,6 +2443,19 @@ Utilize a nossa nova calculadora de formação de preço de produtos para obter 
                   <span className="font-mono text-[#F1F4EE]">R$ {calcAdsExpense.toFixed(2)}</span>
                 </div>
 
+                <div className="flex justify-between items-center py-1 border-b border-[#232B27]/40">
+                  <span className="text-[#8BA58D]">Embalagem:</span>
+                  <span className="font-mono text-[#F1F4EE]">R$ {packagingCost.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center py-1 border-b border-[#232B27]/40">
+                  <span className="text-[#8BA58D]">Envio / Frete:</span>
+                  <span className="font-mono text-[#F1F4EE]">R$ {shippingCost.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center py-1 border-b border-[#232B27]/40">
+                  <span className="text-[#8BA58D]">Insumos de Hardware (rateio):</span>
+                  <span className="font-mono text-[#F1F4EE]">R$ {hardwareCost.toFixed(2)}</span>
+                </div>
+
                 <div className="flex justify-between items-center p-2.5 bg-black/30 rounded-xl">
                   <span className="text-xs text-[#8BA58D] font-bold uppercase tracking-wider">Custo de Fabricação Direto:</span>
                   <span className="font-mono text-xs font-black text-[#F1F4EE]">R$ {directMachineCost.toFixed(2)}</span>
@@ -2394,6 +2464,11 @@ Utilize a nossa nova calculadora de formação de preço de produtos para obter 
                 <div className="flex justify-between items-center py-1 border-b border-[#151917]">
                   <span className="text-[#8BA58D] italic">Comissão do Canal Marketplace ({calcPercentFee}% + R$ {calcFixedFee.toFixed(2)}):</span>
                   <span className="font-mono text-red-400">R$ {commissionPaidToMarketplace.toFixed(2)}</span>
+                </div>
+
+                <div className="flex justify-between items-center py-1 border-b border-[#151917]">
+                  <span className="text-[#8BA58D] italic">Impostos ({calcTaxRegime === 'SIMPLES' ? `Simples ${calcTaxPct}%` : calcTaxRegime === 'MEI' ? 'MEI (DAS mensal)' : 'sem imposto'}):</span>
+                  <span className="font-mono text-red-400">R$ {taxesPaid.toFixed(2)}</span>
                 </div>
 
                 <div className="flex justify-between items-center py-1">
@@ -3103,8 +3178,14 @@ Utilize a nossa nova calculadora de formação de preço de produtos para obter 
                   (Number(calcMktTikTok) || 0)
                 ) / 4;
                 const mktFee = price * (mktAvgPct / 100);
-                const taxes = price * ((Number(calcTaxesPct) || 0) / 100);
-                const extra = fixedFee + energy + labor + mktFee + taxes;
+                const taxRatePct = calcTaxRegime === 'SIMPLES'
+                  ? (Number(calcTaxPct) || 0)
+                  : calcTaxRegime === 'NENHUM' ? 0 : (Number(calcTaxesPct) || 0);
+                const taxes = price * (taxRatePct / 100);
+                const packagingP = Number(calcPackagingCost) || 0;
+                const shippingP  = Number(calcShippingCost)  || 0;
+                const hardwareP  = Number(calcHardwareCost)  || 0;
+                const extra = fixedFee + energy + labor + mktFee + taxes + packagingP + shippingP + hardwareP;
                 // mantém manualProdExtraCost sincronizado para persistir no produto
                 if (Math.abs((Number(manualProdExtraCost) || 0) - extra) > 0.005) {
                   setTimeout(() => setManualProdExtraCost(Number(extra.toFixed(2))), 0);
@@ -3171,6 +3252,9 @@ Utilize a nossa nova calculadora de formação de preço de produtos para obter 
                               { label: 'Potência impr. (W)', val: calcPrinterW, set: setCalcPrinterW, step: '1', hint: 'Watts médios' },
                               { label: 'Mão-de-obra (R$/h)', val: calcLaborHour, set: setCalcLaborHour, step: '0.5', hint: 'Por hora de produção' },
                               { label: 'Impostos (%)', val: calcTaxesPct, set: setCalcTaxesPct, step: '0.1', hint: 'DAS / Simples' },
+                              { label: 'Embalagem (R$)', val: calcPackagingCost, set: setCalcPackagingCost, step: '0.1', hint: 'Caixa/plástico por peça' },
+                              { label: 'Envio (R$)', val: calcShippingCost, set: setCalcShippingCost, step: '0.1', hint: 'Frete embutido' },
+                              { label: 'Insumos HW (R$)', val: calcHardwareCost, set: setCalcHardwareCost, step: '0.1', hint: 'Bico, correia, cola…' },
                             ].map((f, i) => (
                               <div key={i}>
                                 <label className="block text-[9px] uppercase tracking-wider font-bold text-[#8BA58D] mb-1">{f.label}</label>
@@ -3185,6 +3269,26 @@ Utilize a nossa nova calculadora de formação de preço de produtos para obter 
                                 <div className="text-[9px] text-white/30 mt-0.5">{f.hint}</div>
                               </div>
                             ))}
+                          </div>
+                          {/* Regime tributário */}
+                          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#232B27]">
+                            <div>
+                              <label className="block text-[9px] uppercase tracking-wider font-bold text-fuchsia-400 mb-1">Regime tributário</label>
+                              <select value={calcTaxRegime}
+                                onChange={e => setCalcTaxRegime(e.target.value as any)}
+                                className="w-full px-2 py-1.5 rounded-lg bg-black/40 border border-[#232B27] text-white text-xs">
+                                <option value="MEI">MEI (DAS fixo)</option>
+                                <option value="SIMPLES">Simples Nacional</option>
+                                <option value="NENHUM">Sem imposto</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-[9px] uppercase tracking-wider font-bold text-fuchsia-400 mb-1">Alíquota (%)</label>
+                              <input type="number" step="0.1" min="0" value={calcTaxPct}
+                                disabled={calcTaxRegime !== 'SIMPLES'}
+                                onChange={e => setCalcTaxPct(parseFloat(e.target.value) || 0)}
+                                className="w-full px-2 py-1.5 rounded-lg bg-black/40 border border-[#232B27] text-white text-xs disabled:opacity-40" />
+                            </div>
                           </div>
                           <div>
                             <div className="flex items-center justify-between mb-1">
@@ -3219,7 +3323,10 @@ Utilize a nossa nova calculadora de formação de preço de produtos para obter 
                               { l: 'Energia', v: energy },
                               { l: 'Mão-de-obra', v: labor },
                               { l: `Marketplace (${mktAvgPct.toFixed(1)}%)`, v: mktFee },
-                              { l: `Impostos (${(Number(calcTaxesPct)||0).toFixed(1)}%)`, v: taxes },
+                              { l: `Impostos (${taxRatePct.toFixed(1)}%)`, v: taxes },
+                              { l: 'Embalagem', v: packagingP },
+                              { l: 'Envio', v: shippingP },
+                              { l: 'Insumos HW', v: hardwareP },
                             ].map((b, i) => (
                               <div key={i} className="rounded-lg bg-white/[0.02] border border-[#232B27] px-2 py-1.5">
                                 <div className="text-[9px] uppercase tracking-wider text-[#8BA58D] font-bold">{b.l}</div>
