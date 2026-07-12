@@ -5,12 +5,10 @@ import { dedupeQuotationGroups } from '../utils/offerDedupe';
 
 const getCurrentQuotationsPeriod = (): string => {
   const now = new Date();
-  const hours = now.getHours();
-  let period = 'noite';
-  if (hours >= 6 && hours < 12) period = 'manha';
-  else if (hours >= 12 && hours < 18) period = 'tarde';
+  // Uma cotação por dia — economiza créditos SerpApi.
+  // Se o usuário quiser forçar nova cotação, usa o botão manual.
   const dateStr = now.toISOString().split('T')[0];
-  return `${dateStr}_${period}`;
+  return dateStr;
 };
 
 const buildQuotationsUrl = (key: string, key2: string, query?: string): string => {
