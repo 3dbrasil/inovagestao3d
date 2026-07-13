@@ -43,6 +43,7 @@ import { useCustomKeys } from '../hooks/useCustomKeys';
 import { ApiKeyField } from './ApiKeyField';
 import { pickBackupFolder, getBackupFolderName, clearBackupFolder, runBackupNow, getDropboxConfig, setDropboxConfig, testDropbox, getDropboxOAuth, buildDropboxAuthUrl, exchangeDropboxCode, disconnectDropboxOAuth, getGDriveConfig, setGDriveConfig, testGDrive } from '../hooks/useAutoBackup';
 import { getTelegramChatId, setTelegramChatId, getTelegramAutoSend, setTelegramAutoSend, sendStlToTelegram } from '../lib/telegram';
+import { createCompleteBackup, isGestao3DBackup, restoreCompleteBackup } from '../utils/fullBackup';
 
 function TelegramStlControl() {
   const [chatId, setChatIdState] = React.useState(() => getTelegramChatId());
@@ -525,51 +526,13 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
 
   // Restaura backup completo: reescreve todo o localStorage e recarrega a página
   // para que cada módulo releia produtos, insumos, keys, logo, tuya, cotações…
-  const applyFullBackup = (json: any) => {
+  const applyFullBackup = async (json: any) => {
     try {
-      // 1) Preferencial: dump completo do localStorage
-      if (json.storage && typeof json.storage === 'object') {
-        // Preserva chaves críticas que NÃO devem ser sobrescritas (autenticação atual etc.)
-        const preserveKeys = new Set<string>([
-          'bambuzau_rollback_snapshot',
-          'bambuzau_open_product_form_pending',
-        ]);
-        const preserved: Record<string, string | null> = {};
-        preserveKeys.forEach((k) => { preserved[k] = localStorage.getItem(k); });
-
-        try { localStorage.clear(); } catch {}
-
-        Object.entries(json.storage as Record<string, string>).forEach(([k, v]) => {
-          try { localStorage.setItem(k, String(v)); } catch (e) { console.warn('skip', k, e); }
-        });
-
-        Object.entries(preserved).forEach(([k, v]) => {
-          if (v !== null && !json.storage[k]) {
-            try { localStorage.setItem(k, v); } catch {}
-          }
-        });
-      } else {
-        // 2) Fallback (backups antigos sem `storage`): grava por chave conhecida
-        const pairs: Array<[string, any]> = [
-          ['bambuzau_clients', json.clients],
-          ['bambuzau_printers', json.printers],
-          ['bambuzau_orders', json.orders],
-          ['bambuzau_filament', json.filamentStocks],
-          ['bambuzau_expenses', json.expenses],
-          ['bambuzau_shopping', json.shoppingItems],
-          ['bambuzau_supplies', json.suppliesStocks],
-          ['bambuzau_local_catalog_production', json.catalogItems],
-          ['bambuzau_tuya_devices', json.tuyaDevices],
-          ['bambuzau_brand_config', json.brandConfig],
-        ];
-        pairs.forEach(([k, v]) => {
-          if (v !== undefined && v !== null) {
-            try { localStorage.setItem(k, typeof v === 'string' ? v : JSON.stringify(v)); } catch {}
-          }
-        });
-      }
-
-      showSuccess('Backup restaurado! Recarregando aplicativo para aplicar produtos, estoques, chaves e logo…');
+      const summary = await restoreCompleteBackup(json);
+      const vaultMsg = summary.hasCatalogBackup
+        ? ` Vault STL/3MF: ${summary.catalogFiles}/${summary.catalogModels} arquivo(s) restaurado(s).`
+        : ' Este backup antigo não contém arquivos STL/3MF do Vault.';
+      showSuccess(`Backup restaurado 100% do que o arquivo contém: ${summary.storageKeys} chaves locais aplicadas.${vaultMsg} Recarregando…`);
       setTimeout(() => { try { window.location.reload(); } catch {} }, 900);
     } catch (err: any) {
       showError('Falha ao restaurar backup completo: ' + (err?.message || err));
@@ -957,28 +920,9 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   };
 
   // 1. Export Data to JSON
-  const handleExportData = () => {
+  const handleExportData = async () => {
     try {
-      // Snapshot ALL persisted app state: every localStorage entry the app owns
-      // (bambuzau_*, gestao3d_*, catalog, api keys, tuya devices, brand/logo, etc.)
-      const storageDump: Record<string, string> = {};
-      try {
-        for (let i = 0; i < localStorage.length; i++) {
-          const k = localStorage.key(i);
-          if (!k) continue;
-          // Skip transient UI flags that must not be restored
-          if (k === 'bambuzau_open_product_form_pending') continue;
-          const v = localStorage.getItem(k);
-          if (v !== null) storageDump[k] = v;
-        }
-      } catch (e) {
-        console.warn('Falha ao ler localStorage:', e);
-      }
-
-      const exportObject = {
-        app_signature: 'Gestao3D_Backup',
-        version: '3.4.0',
-        timestamp: Date.now(),
+      const exportObject = await createCompleteBackup({
         // In-memory React state (kept for backward compat with older restores)
         clients: clients || [],
         printers: printers || [],
@@ -991,9 +935,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
           try { return JSON.parse(localStorage.getItem('bambuzau_local_catalog_production') || '[]'); }
           catch { return []; }
         })(),
-        // Full storage dump — restores everything: keys, insumos, logo, tuya, cotações…
-        storage: storageDump,
-      };
+      });
 
       const jsonBackupText = JSON.stringify(exportObject, null, 2);
       const dateStr = new Date().toISOString().slice(0, 10);
@@ -1024,7 +966,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
         URL.revokeObjectURL(downloadUrl);
       }
 
-      showSuccess('Backup baixado com sucesso! Guarde este arquivo em segurança no seu PC ou pendrive.');
+      showSuccess(`Backup completo baixado: ${exportObject.integrity.localStorageKeys} chaves + ${exportObject.integrity.catalogFiles}/${exportObject.integrity.catalogModels} STL/3MF do Vault.`);
     } catch (err: any) {
       showError('Ocorreu um erro ao exportar os dados: ' + err.message);
     }
@@ -1044,27 +986,16 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
     createLocalRestorePoint(true);
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
         const json = JSON.parse(event.target?.result as string);
-        
-        // Flexible and robust verification: accepts standard signatures OR presence of core datasets
-        const isValidBackup = json && (
-          json.app_signature === 'Gestao3D_Backup' ||
-          json.app_signature === 'Bambuzau3D_Backup' ||
-          Array.isArray(json.clients) ||
-          Array.isArray(json.orders) ||
-          Array.isArray(json.printers) ||
-          Array.isArray(json.filamentStocks) ||
-          (json.storage && typeof json.storage === 'object')
-        );
 
-        if (!isValidBackup) {
+        if (!isGestao3DBackup(json)) {
           showError('Arquivo do backup inválido ou incompatível! O arquivo precisa ser um backup gerado pelo Gestão 3D.');
           return;
         }
 
-        applyFullBackup(json);
+        await applyFullBackup(json);
       } catch (err: any) {
         showError('Erro ao processar as informações do arquivo: ' + err.message);
       }
@@ -1074,22 +1005,9 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   };
 
   // 1b. Export Backup to Clipboard (Text representation fallback for WebViews)
-  const handleExportToClipboard = () => {
+  const handleExportToClipboard = async () => {
     try {
-      let localCatalog = [];
-      try {
-        const savedCatalog = localStorage.getItem('bambuzau_local_catalog_production');
-        if (savedCatalog) {
-          localCatalog = JSON.parse(savedCatalog);
-        }
-      } catch (e) {
-        console.warn("Could not read local catalog on export:", e);
-      }
-
-      const exportObject = {
-        app_signature: 'Gestao3D_Backup',
-        version: '3.3.0.4',
-        timestamp: Date.now(),
+      const exportObject = await createCompleteBackup({
         clients: clients || [],
         printers: printers || [],
         orders: orders || [],
@@ -1097,8 +1015,11 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
         expenses: expenses || [],
         shoppingItems: shoppingItems || [],
         brandConfig: brandConfig || {},
-        catalogItems: localCatalog
-      };
+        catalogItems: (() => {
+          try { return JSON.parse(localStorage.getItem('bambuzau_local_catalog_production') || '[]'); }
+          catch { return []; }
+        })(),
+      });
 
       const jsonString = JSON.stringify(exportObject, null, 2);
 
@@ -1155,7 +1076,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   };
 
   // 2b. Import Backup from pasted text structure
-  const handleImportFromPastedText = () => {
+  const handleImportFromPastedText = async () => {
     if (!backupText.trim()) {
       showError('Por favor, cole o texto de backup copiado anteriormente no campo de texto.');
       return;
@@ -1168,8 +1089,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
     try {
       const json = JSON.parse(backupText.trim());
       
-      // Validation check
-      if (!json || (json.app_signature !== 'Gestao3D_Backup' && json.app_signature !== 'Bambuzau3D_Backup' && !json.clients && !json.orders && !json.storage)) {
+      if (!isGestao3DBackup(json)) {
         showError('Texto colado não parece ser um backup válido do Gestão 3D!');
         return;
       }
@@ -1177,7 +1097,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
       // Criar ponto de restauração automático de emergência antes da importação
       createLocalRestorePoint(true);
 
-      applyFullBackup(json);
+      await applyFullBackup(json);
 
       setBackupText('');
       setShowClipboardBackup(false);

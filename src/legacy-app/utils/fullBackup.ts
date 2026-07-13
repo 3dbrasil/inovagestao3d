@@ -97,12 +97,12 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 function base64ToBlob(base64: string, mimeType: string): Blob {
   const binary = atob(base64);
   const chunkSize = 0x8000;
-  const chunks: Uint8Array[] = [];
+  const chunks: ArrayBuffer[] = [];
   for (let i = 0; i < binary.length; i += chunkSize) {
     const chunk = binary.slice(i, i + chunkSize);
     const bytes = new Uint8Array(chunk.length);
     for (let j = 0; j < chunk.length; j++) bytes[j] = chunk.charCodeAt(j);
-    chunks.push(bytes);
+    chunks.push(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
   }
   return new Blob(chunks, { type: mimeType || "application/octet-stream" });
 }

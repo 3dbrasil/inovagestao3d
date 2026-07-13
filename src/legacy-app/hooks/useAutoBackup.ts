@@ -267,24 +267,8 @@ export async function clearBackupFolder() {
 }
 
 async function collectBackup() {
-  const data: any = {
-    exportedAt: new Date().toISOString(),
-    version: 1,
-    localStorage: {} as Record<string, string>,
-    catalog: { models: [] as any[] },
-  };
-  try {
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (!k) continue;
-      data.localStorage[k] = localStorage.getItem(k) ?? '';
-    }
-  } catch {}
-  try {
-    const { listModels } = await import('@/lib/catalog-db');
-    data.catalog.models = await listModels();
-  } catch {}
-  return data;
+  const { createCompleteBackup } = await import('../utils/fullBackup');
+  return createCompleteBackup({ autoBackup: true });
 }
 
 function downloadJson(obj: any, fileName: string) {
