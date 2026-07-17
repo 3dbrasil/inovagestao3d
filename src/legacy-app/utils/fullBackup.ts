@@ -35,6 +35,8 @@ export type CompleteBackup = Record<string, unknown> & {
     catalogModels: number;
     catalogFiles: number;
     missingCatalogFiles: number;
+    checksum?: string;
+    checksumAlgo?: "sha-256";
   };
 };
 
@@ -45,6 +47,15 @@ export type RestoreSummary = {
   missingCatalogFiles: number;
   hasCatalogBackup: boolean;
 };
+
+export class BackupIntegrityError extends Error {
+  issues: string[];
+  constructor(issues: string[]) {
+    super(`Backup inválido: ${issues.join(" | ")}`);
+    this.name = "BackupIntegrityError";
+    this.issues = issues;
+  }
+}
 
 const TRANSIENT_STORAGE_KEYS = new Set([
   "bambuzau_open_product_form_pending",
@@ -92,6 +103,44 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
     binary += String.fromCharCode(...chunk);
   }
   return btoa(binary);
+}
+
+/**
+ * Canoniza o backup (ordena chaves) para gerar um checksum estável,
+ * ignorando o próprio campo `integrity.checksum`.
+ */
+function canonicalStringify(value: any): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return "[" + value.map(canonicalStringify).join(",") + "]";
+  const keys = Object.keys(value).sort();
+  return "{" + keys.map((k) => JSON.stringify(k) + ":" + canonicalStringify(value[k])).join(",") + "}";
+}
+
+async function sha256Hex(input: string): Promise<string> {
+  const bytes = new TextEncoder().encode(input);
+  const subtle = (globalThis.crypto as Crypto | undefined)?.subtle;
+  if (subtle) {
+    const digest = await subtle.digest("SHA-256", bytes);
+    return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
+  // Fallback (jsdom sem subtle): hash simples, ainda detecta corrupção
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+  for (let i = 0; i < bytes.length; i++) {
+    h1 = Math.imul(h1 ^ bytes[i], 2654435761);
+    h2 = Math.imul(h2 ^ bytes[i], 1597334677);
+  }
+  return (h1 >>> 0).toString(16).padStart(8, "0") + (h2 >>> 0).toString(16).padStart(8, "0");
+}
+
+export async function computeBackupChecksum(backup: any): Promise<string> {
+  const { integrity, ...rest } = backup || {};
+  const integrityWithoutChecksum = integrity ? { ...integrity } : undefined;
+  if (integrityWithoutChecksum) {
+    delete (integrityWithoutChecksum as any).checksum;
+    delete (integrityWithoutChecksum as any).checksumAlgo;
+  }
+  const payload = integrityWithoutChecksum ? { ...rest, integrity: integrityWithoutChecksum } : rest;
+  return sha256Hex(canonicalStringify(payload));
 }
 
 function base64ToBlob(base64: string, mimeType: string): Blob {
@@ -152,7 +201,7 @@ export async function createCompleteBackup(extraData: Record<string, unknown> = 
     missingFileModelIds,
   };
 
-  return {
+  const backup: CompleteBackup = {
     app_signature: GESTAO3D_BACKUP_SIGNATURE,
     version: GESTAO3D_BACKUP_VERSION,
     backupFormat: "gestao3d-complete-vault-v1",
@@ -173,7 +222,11 @@ export async function createCompleteBackup(extraData: Record<string, unknown> = 
       catalogFiles: files.length,
       missingCatalogFiles: missingFileModelIds.length,
     },
-  };
+  } as CompleteBackup;
+  const checksum = await computeBackupChecksum(backup);
+  backup.integrity.checksum = checksum;
+  backup.integrity.checksumAlgo = "sha-256";
+  return backup;
 }
 
 function readBackupStorage(json: any): StorageDump | null {
@@ -253,6 +306,7 @@ function findFileForModel(files: any[], model: ModelRecord): any | undefined {
 }
 
 export async function restoreCompleteBackup(json: any): Promise<RestoreSummary> {
+  await validateBackupIntegrity(json);
   const fullDump = readBackupStorage(json);
   const legacyDump = fullDump ? null : legacyStorageFromBackup(json);
   const storageDump = fullDump || legacyDump || {};
@@ -306,4 +360,67 @@ export function isGestao3DBackup(json: any): boolean {
     readBackupStorage(json) ||
     readCatalogSource(json)
   );
+}
+
+/**
+ * Valida o backup ANTES de tocar em localStorage ou IndexedDB.
+ * - Assinatura correta
+ * - Estrutura mínima presente
+ * - Cada arquivo do Vault com base64 decodável e tamanho coerente
+ * - Checksum SHA-256 confere (quando presente)
+ * Lança BackupIntegrityError com a lista de problemas.
+ */
+export async function validateBackupIntegrity(json: any): Promise<void> {
+  const issues: string[] = [];
+  if (!json || typeof json !== "object") {
+    throw new BackupIntegrityError(["Arquivo não é um JSON de backup válido."]);
+  }
+  if (!isGestao3DBackup(json)) {
+    issues.push("Assinatura do backup não reconhecida.");
+  }
+
+  const catalogSource = readCatalogSource(json);
+  if (catalogSource) {
+    if (!Array.isArray(catalogSource.models)) {
+      issues.push("catalogVault.models ausente ou inválido.");
+    }
+    const seenIds = new Set<string>();
+    for (const model of catalogSource.models || []) {
+      if (!model?.id || !model?.fileName) {
+        issues.push("Modelo do Vault sem id/fileName.");
+        continue;
+      }
+      if (seenIds.has(model.id)) issues.push(`Modelo duplicado: ${model.id}`);
+      seenIds.add(model.id);
+    }
+    for (const file of catalogSource.files || []) {
+      if (!file) continue;
+      const b64 = typeof file.dataBase64 === "string"
+        ? file.dataBase64
+        : (typeof file.dataUrl === "string" ? readDataUrlPayload(file.dataUrl)?.base64 : "");
+      if (!b64) {
+        issues.push(`Arquivo ${file.fileName || file.modelId || "?"} sem payload base64.`);
+        continue;
+      }
+      try {
+        const decoded = atob(b64);
+        if (typeof file.size === "number" && file.size > 0 && Math.abs(decoded.length - file.size) > 4) {
+          issues.push(`Arquivo ${file.fileName} com tamanho divergente (esperado ${file.size}, decodificado ${decoded.length}).`);
+        }
+      } catch {
+        issues.push(`Arquivo ${file.fileName || file.modelId} com base64 corrompido.`);
+      }
+    }
+  }
+
+  const integrity = (json as any).integrity;
+  if (integrity && typeof integrity.checksum === "string" && integrity.checksum.length > 0) {
+    const expected = integrity.checksum as string;
+    const actual = await computeBackupChecksum(json);
+    if (expected !== actual) {
+      issues.push("Checksum não confere — o arquivo foi editado ou corrompido após o backup.");
+    }
+  }
+
+  if (issues.length > 0) throw new BackupIntegrityError(issues);
 }
