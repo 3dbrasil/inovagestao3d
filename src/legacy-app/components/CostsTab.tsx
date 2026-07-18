@@ -270,6 +270,31 @@ export const CostsTab: React.FC<CostsTabProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Gera código sequencial para GASTO, usando o mesmo detectPrefix pelo nome
+  const genExpenseCode = (existing: Expense[], name: string = ''): string => {
+    const prefix = detectPrefix(name);
+    const re = new RegExp(`^${prefix}-?\\d+$`);
+    const nums = existing
+      .map(e => (e as any).code || '')
+      .filter((c: string) => re.test(c))
+      .map((c: string) => parseInt(c.replace(prefix, '').replace(/^-/, ''), 10))
+      .filter((n: number) => !isNaN(n));
+    const next = (nums.length ? Math.max(...nums) : 0) + 1;
+    return `${prefix}${String(next).padStart(4, '0')}`;
+  };
+
+  // Retroativo: garante código em gastos legados
+  useEffect(() => {
+    if (!expenses || expenses.length === 0) return;
+    if (expenses.every(e => (e as any).code)) return;
+    expenses.forEach(e => {
+      if (!(e as any).code) {
+        onUpdateExpense(e.id, { code: genExpenseCode(expenses, e.description) } as any);
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Lista de sugestões: SOMENTE itens já cadastrados (Gastos + Estoque de Insumos + Filamentos)
   const supplyNameSuggestions = useMemo(() => {
     const names: string[] = [];
