@@ -1228,6 +1228,7 @@ export const CostsTab: React.FC<CostsTabProps> = ({
       : expenseSupplier;
 
     onAddExpense({
+      code: genExpenseCode(expenses, expenseDesc.trim()),
       description: expenseDesc.trim(),
       category: expenseCategory,
       amount: expenseAmount || 0,
@@ -1235,7 +1236,7 @@ export const CostsTab: React.FC<CostsTabProps> = ({
       date: Date.now(),
       supplier: supplierValue,
       month: expenseMonth
-    });
+    } as any);
 
     // Auto-create in Stock/Inventory if applicable and selected
     if (stockSendToInventory) {
@@ -4558,6 +4559,11 @@ Utilize a nossa nova calculadora de formação de preço de produtos para obter 
                     <div key={item.id} className="p-3 bg-[#0C0E0D] border border-[#232B27]/70 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-emerald-500/20 transition-colors duration-200">
                       <div className="space-y-1">
                         <div className="flex flex-wrap gap-1.5 items-center">
+                          {(item as any).code && (
+                            <span className="text-[8.5px] font-mono font-black bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded text-emerald-300">
+                              {(item as any).code}
+                            </span>
+                          )}
                           <span className="text-[8.5px] font-mono font-black bg-[#b7ff00]/10 border border-[#b7ff00]/25 px-2 py-0.5 rounded text-[#b7ff00]">
                             {getExpenseCategoryLabel(item.category)}
                           </span>
