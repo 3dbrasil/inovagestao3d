@@ -118,6 +118,18 @@ const getSafeOfferUrl = (offer: any, fallbackQuery: string) => {
   return `https://www.buscape.com.br/search?q=${query}`;
 };
 
+const normalizeSuggestionText = (value: string) => String(value || '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase()
+  .trim();
+
+const matchesSuggestionQuery = (name: string, query: string) => {
+  const normalizedName = normalizeSuggestionText(name);
+  const terms = normalizeSuggestionText(query).split(/\s+/).filter(Boolean);
+  return terms.length > 0 && terms.every(term => normalizedName.includes(term));
+};
+
 interface CostsTabProps {
   filamentStocks: FilamentStock[];
   shoppingItems: ShoppingItem[];
@@ -219,17 +231,6 @@ export const CostsTab: React.FC<CostsTabProps> = ({
   const [sImage, setSImage] = useState('');
   const [showAddSupplyForm, setShowAddSupplyForm] = useState(false);
 
-  // Sugestões pré-definidas para autocomplete de nomes de insumos/gastos
-  const SUPPLY_NAME_PRESETS = [
-    'Caixa Kraft Correios 16x11x6','Caixa Kraft Correios 18x13x9','Caixa Papelão P','Caixa Papelão M','Caixa Papelão G',
-    'Envelope Bolha','Plástico Bolha (m)','Saco Plástico Zip','Fita Adesiva Transparente','Fita Kraft','Etiqueta Térmica 100x150',
-    'Cola Bastão','Cola Instantânea Super Bonder','Cola de Contato','Spray Fixador de Impressão','Álcool Isopropílico 1L',
-    'Bico Latão 0.4mm','Bico Endurecido 0.4mm','Bico 0.6mm','Bico 0.8mm','Correia GT2 (m)','Rolamento 608ZZ','Lâmina de Estilete',
-    'Ímã Neodímio 6x2mm','Ímã Neodímio 10x2mm','Parafuso M3x8','Parafuso M3x12','Porca M3','Inserto de Latão M3',
-    'Lixa 400','Lixa 600','Lixa 1000','Lixa 2000','Tinta Spray Preta','Tinta Spray Branca','Primer Spray',
-    'Filtro de Ar HEPA','Placa PEI','Placa Vidro','Cola PEI','Chave Allen Kit','Bandeja Cura UV',
-  ];
-
   // Detecta prefixo pela categoria/nome do insumo
   const detectPrefix = (name: string): string => {
     const n = (name || '').toLowerCase();
@@ -269,19 +270,31 @@ export const CostsTab: React.FC<CostsTabProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Lista de sugestões: SOMENTE itens já cadastrados (Gastos + Estoque de Insumos)
+  // Lista de sugestões: SOMENTE itens já cadastrados (Gastos + Estoque de Insumos + Filamentos)
   const supplyNameSuggestions = useMemo(() => {
     const names: string[] = [];
-    suppliesStocks.forEach(s => { if (s.name) names.push(s.name); });
+    const pushName = (value?: string) => {
+      const cleaned = String(value || '').replace(/\s+/g, ' ').trim();
+      if (cleaned) names.push(cleaned);
+    };
+
+    suppliesStocks.forEach(s => pushName(s.name));
+    expenses.forEach(e => pushName(e.description));
+    filamentStocks.forEach(f => {
+      const registeredFilamentName = `${f.type || ''} ${f.color || ''}`.trim();
+      pushName(registeredFilamentName);
+      if (registeredFilamentName) pushName(`Refil 1kg ${registeredFilamentName}`);
+    });
+
     try {
       const raw = typeof window !== 'undefined' ? localStorage.getItem('insumos_v1') : null;
       if (raw) {
         const parsed = JSON.parse(raw);
-        (parsed?.insumos || []).forEach((i: any) => { if (i?.nome) names.push(i.nome); });
+        (parsed?.insumos || []).forEach((i: any) => pushName(i?.nome));
       }
     } catch {}
-    return Array.from(new Set(names)).sort();
-  }, [suppliesStocks]);
+    return Array.from(new Set(names)).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [suppliesStocks, expenses, filamentStocks]);
 
   // Fallbacks client-side to guarantee at least 5 items
   const getClientFallbackOffers = (type: string) => {
@@ -561,6 +574,7 @@ export const CostsTab: React.FC<CostsTabProps> = ({
 
   // Expenses form states for Work Materials
   const [expenseDesc, setExpenseDesc] = useState('');
+  const [showExpenseSuggestions, setShowExpenseSuggestions] = useState(false);
   const [expenseAmount, setExpenseAmount] = useState(0);
   const [expenseTotalAmount, setExpenseTotalAmount] = useState(0);
   const [expenseCategory, setExpenseCategory] = useState<'FILAMENTO' | 'EQUIPAMENTO' | 'ENERGIA' | 'EMBALAGEM' | 'FERRAMENTAS' | 'HARDWARE' | 'SERVICOS' | 'MARKETING' | 'IMPOSTOS' | 'OUTROS' | 'ACESSORIO_INSUMO'>('EMBALAGEM');
@@ -611,6 +625,13 @@ export const CostsTab: React.FC<CostsTabProps> = ({
       return e.month === selectedFilterMonth;
     });
   }, [expenses, selectedFilterMonth]);
+
+  const expenseNameMatches = React.useMemo(() => {
+    if (!expenseDesc.trim()) return [];
+    return supplyNameSuggestions
+      .filter(name => matchesSuggestionQuery(name, expenseDesc))
+      .slice(0, 10);
+  }, [expenseDesc, supplyNameSuggestions]);
 
   const colorGroups = React.useMemo(() => {
     const groups: { [key: string]: { originalName: string; count: number; totalWeightKg: number; bg: string; text: string; border: string } } = {};
@@ -1978,6 +1999,10 @@ Utilize a nossa nova calculadora de formação de preço de produtos para obter 
 
   return (
     <div className="space-y-6" id="costs_tab_container">
+      <datalist id="supply-name-suggest">
+        {supplyNameSuggestions.map(n => <option key={n} value={n} />)}
+      </datalist>
+
       {/* GLOBAL ALERTS PORTAL */}
       {alertMessage.text && (() => {
         const tone = alertMessage.type === 'error'
@@ -4212,14 +4237,35 @@ Utilize a nossa nova calculadora de formação de preço de produtos para obter 
                     required
                     placeholder="Ex: Refil 1kg PLA Branco GTMax"
                     value={expenseDesc}
-                    onChange={(e) => setExpenseDesc(e.target.value)}
+                    onChange={(e) => {
+                      setExpenseDesc(e.target.value);
+                      setShowExpenseSuggestions(true);
+                    }}
+                    onFocus={() => setShowExpenseSuggestions(true)}
+                    onBlur={() => window.setTimeout(() => setShowExpenseSuggestions(false), 120)}
                     list="supply-name-suggest"
                     autoComplete="off"
                     className="w-full bg-[#0C0E0D] border border-[#232B27] rounded-xl px-3 py-1.5 text-xs text-white outline-none"
                   />
-                  <datalist id="supply-name-suggest">
-                    {supplyNameSuggestions.map(n => <option key={n} value={n} />)}
-                  </datalist>
+                  {showExpenseSuggestions && expenseDesc.trim() && expenseNameMatches.length > 0 && (
+                    <div className="relative z-30 mt-1 max-h-40 overflow-y-auto rounded-xl border border-emerald-400/25 bg-[#070908] shadow-[0_18px_45px_rgba(0,0,0,0.55)]">
+                      {expenseNameMatches.map(name => (
+                        <button
+                          key={name}
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            setExpenseDesc(name);
+                            setShowExpenseSuggestions(false);
+                          }}
+                          className="flex w-full items-center gap-2 border-b border-white/5 px-3 py-2 text-left text-[11px] font-semibold text-[#F1F4EE] transition hover:bg-emerald-500/15 last:border-b-0"
+                        >
+                          <Search className="h-3 w-3 shrink-0 text-emerald-400" />
+                          <span className="truncate">{name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
@@ -4942,6 +4988,8 @@ Utilize a nossa nova calculadora de formação de preço de produtos para obter 
                   placeholder="Ex: Refil 1kg PLA Branco GTMax"
                   value={editExpenseDesc}
                   onChange={(e) => setEditExpenseDesc(e.target.value)}
+                  list="supply-name-suggest"
+                  autoComplete="off"
                   className="w-full bg-[#0C0E0D] border border-[#232B27] rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-amber-500/50"
                 />
               </div>
