@@ -1184,6 +1184,7 @@ export const CostsTab: React.FC<CostsTabProps> = ({
       } else if (expenseCategory === 'ACESSORIO_INSUMO') {
         const newSupply: SupplyStock = {
           id: suppliesStocks.length > 0 ? Math.max(...suppliesStocks.map(s => s.id)) + 1 : 1,
+          code: genSupplyCode(suppliesStocks),
           name: expenseDesc.trim(),
           stockCount: expenseQty || 1,
           minStockCount: stockSupplyMinAlert,
@@ -1268,6 +1269,7 @@ export const CostsTab: React.FC<CostsTabProps> = ({
       } else if (editExpenseCategory === 'ACESSORIO_INSUMO') {
         const newSupply: SupplyStock = {
           id: suppliesStocks.length > 0 ? Math.max(...suppliesStocks.map(s => s.id)) + 1 : 1,
+          code: genSupplyCode(suppliesStocks),
           name: editExpenseDesc.trim(),
           stockCount: editExpenseQty || 1,
           minStockCount: editStockSupplyMinAlert,
