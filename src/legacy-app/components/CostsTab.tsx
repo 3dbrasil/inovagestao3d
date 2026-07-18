@@ -1002,6 +1002,7 @@ export const CostsTab: React.FC<CostsTabProps> = ({
     if (!sName.trim()) return;
     const newSupply: SupplyStock = {
       id: suppliesStocks.length > 0 ? Math.max(...suppliesStocks.map(s => s.id)) + 1 : 1,
+      code: genSupplyCode(suppliesStocks),
       name: sName.trim(),
       stockCount: sCount,
       minStockCount: sMinCount,
