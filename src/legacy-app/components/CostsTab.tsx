@@ -4051,6 +4051,11 @@ Utilize a nossa nova calculadora de formação de preço de produtos para obter 
                     <div className="space-y-1 flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
                         <Box className="h-3.5 w-3.5 text-[#b7ff00]" />
+                        {(sup as any).code && (
+                          <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-[#b7ff00]/10 text-[#b7ff00] border border-[#b7ff00]/25">
+                            {(sup as any).code}
+                          </span>
+                        )}
                         <span className="text-xs font-bold text-white leading-tight">{sup.name}</span>
                         {low && <span className="text-[7.5px] font-mono uppercase bg-red-400/15 text-red-400 border border-red-500/30 px-1.5 py-0.5 rounded animate-pulse font-black">Estoque Baixo 🚨</span>}
                       </div>
