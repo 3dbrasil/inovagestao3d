@@ -14,6 +14,7 @@ type MovTipo = 'entrada' | 'consumo' | 'ajuste';
 
 type Insumo = {
   id: string;
+  codigo?: string;
   nome: string;
   tipo: Tipo;
   material: string;
@@ -44,6 +45,30 @@ const save = (s: State) => { try { localStorage.setItem(KEY, JSON.stringify(s));
 const uid = () => Math.random().toString(36).slice(2, 10);
 const brl = (n: number) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const num = (n: number) => Number(n || 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+
+/* ---------- código automático ---------- */
+const tipoPrefix = (t: Tipo) => (t === 'filamento' ? 'FIL' : t === 'resina' ? 'RES' : 'INS');
+const nextCodigo = (insumos: Insumo[], tipo: Tipo) => {
+  const prefix = tipoPrefix(tipo);
+  const nums = insumos
+    .map(i => i.codigo || '')
+    .filter(c => c.startsWith(prefix + '-'))
+    .map(c => parseInt(c.split('-')[1] || '0', 10))
+    .filter(n => !isNaN(n));
+  const next = (nums.length ? Math.max(...nums) : 0) + 1;
+  return `${prefix}-${String(next).padStart(4, '0')}`;
+};
+
+/* nomes pré-definidos + já cadastrados = sugestões */
+const PRESET_NOMES = [
+  'PLA Preto 1kg','PLA Branco 1kg','PLA Cinza 1kg','PLA Vermelho 1kg','PLA Azul 1kg','PLA Verde 1kg','PLA Amarelo 1kg','PLA Silk Ouro 1kg','PLA Silk Prata 1kg',
+  'PETG Preto 1kg','PETG Branco 1kg','PETG Transparente 1kg',
+  'ABS Preto 1kg','ABS Branco 1kg',
+  'ASA Preto 1kg','ASA Branco 1kg',
+  'TPU Preto 1kg','TPU Transparente 1kg',
+  'Resina Cinza 1L','Resina Transparente 1L','Resina Water Washable 1L',
+  'Embalagem Plástica','Caixa de Papelão P','Caixa de Papelão M','Fita Adesiva','Etiqueta Térmica','Parafuso M3','Ímã Neodímio',
+];
 
 /* ---------- UI primitives ---------- */
 const Card: React.FC<any> = ({ children, className = '' }) => (
@@ -100,7 +125,7 @@ const Badge: React.FC<{ tone: 'lime' | 'amber' | 'red' | 'zinc'; children: any }
 
 /* ---------- main ---------- */
 const emptyForm = (): Insumo => ({
-  id: '', nome: '', tipo: 'filamento', material: 'PLA', cor: '',
+  id: '', codigo: '', nome: '', tipo: 'filamento', material: 'PLA', cor: '',
   diametro: '1.75mm', peso_liquido_g: 1000, quantidade_estoque: 0,
   custo_unitario: 0, data_compra: new Date().toISOString().slice(0, 10),
   fornecedor: '', observacoes: '', minimo: 0.3, created_at: '',
@@ -119,6 +144,23 @@ export const InsumosTab: React.FC = () => {
 
   useEffect(() => { save(state); }, [state]);
 
+  // Garante código para insumos legados sem código
+  useEffect(() => {
+    const semCodigo = state.insumos.filter(i => !i.codigo);
+    if (semCodigo.length === 0) return;
+    setState(s => {
+      const cop = structuredClone(s);
+      cop.insumos.forEach(i => { if (!i.codigo) i.codigo = nextCodigo(cop.insumos.filter(x => x.codigo), i.tipo); });
+      return cop;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const nameSuggestions = useMemo(() => {
+    const set = new Set<string>([...PRESET_NOMES, ...state.insumos.map(i => i.nome).filter(Boolean)]);
+    return Array.from(set).sort();
+  }, [state.insumos]);
+
   const update = (fn: (s: State) => State) => setState(s => fn(structuredClone(s)));
 
   const openCreate = () => { setForm(emptyForm()); setEditingId(null); setOpenForm(true); };
@@ -131,7 +173,8 @@ export const InsumosTab: React.FC = () => {
         const idx = s.insumos.findIndex(x => x.id === editingId);
         if (idx >= 0) s.insumos[idx] = { ...form, id: editingId };
       } else {
-        s.insumos.push({ ...form, id: uid(), created_at: new Date().toISOString() });
+        const codigo = form.codigo?.trim() || nextCodigo(s.insumos, form.tipo);
+        s.insumos.push({ ...form, codigo, id: uid(), created_at: new Date().toISOString() });
       }
       return s;
     });
@@ -223,6 +266,7 @@ export const InsumosTab: React.FC = () => {
           <table className="w-full text-sm min-w-[900px]">
             <thead className="bg-white/[0.03] text-[10px] uppercase tracking-widest text-zinc-400">
               <tr>
+                <th className="text-left p-3">Código</th>
                 <th className="text-left p-3">Nome</th>
                 <th className="text-left p-3">Tipo</th>
                 <th className="text-left p-3">Material</th>
@@ -239,6 +283,7 @@ export const InsumosTab: React.FC = () => {
                 const baixo = Number(i.quantidade_estoque) < min;
                 return (
                   <tr key={i.id} className={`border-t border-white/5 ${baixo ? 'bg-red-500/5' : ''}`}>
+                    <td className="p-3"><span className="font-mono text-[11px] text-[#b7ff00]/90">{i.codigo || '—'}</span></td>
                     <td className="p-3">
                       <div className="flex items-center gap-2">
                         {baixo && <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />}
@@ -291,12 +336,26 @@ export const InsumosTab: React.FC = () => {
       {/* Form Modal */}
       <Modal open={openForm} onClose={() => setOpenForm(false)} title={editingId ? 'Editar Insumo' : 'Novo Insumo'} maxW="max-w-2xl">
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Nome" className="col-span-2"><Input value={form.nome} onChange={(e: any) => setForm({ ...form, nome: e.target.value })} placeholder="PLA Preto 1kg" /></Field>
+          <Field label="Código (automático)">
+            <Input value={form.codigo || ''} onChange={(e: any) => setForm({ ...form, codigo: e.target.value })} placeholder={editingId ? '' : 'Gerado ao salvar'} />
+          </Field>
           <Field label="Tipo"><Select value={form.tipo} onChange={(e: any) => setForm({ ...form, tipo: e.target.value })}>
             <option value="filamento">Filamento</option>
             <option value="resina">Resina</option>
             <option value="outros">Outros</option>
           </Select></Field>
+          <Field label="Nome" className="col-span-2">
+            <Input
+              list="insumo-nome-suggest"
+              value={form.nome}
+              onChange={(e: any) => setForm({ ...form, nome: e.target.value })}
+              placeholder="Digite para buscar ou cadastrar (ex: PLA Preto 1kg)"
+              autoComplete="off"
+            />
+            <datalist id="insumo-nome-suggest">
+              {nameSuggestions.map(n => <option key={n} value={n} />)}
+            </datalist>
+          </Field>
           <Field label="Material"><Input value={form.material} onChange={(e: any) => setForm({ ...form, material: e.target.value })} placeholder="PLA, ABS, PETG, Resina padrão..." /></Field>
           <Field label="Cor"><Input value={form.cor} onChange={(e: any) => setForm({ ...form, cor: e.target.value })} placeholder="Preto" /></Field>
           <Field label="Diâmetro"><Input value={form.diametro || ''} onChange={(e: any) => setForm({ ...form, diametro: e.target.value })} placeholder="1.75mm" /></Field>
