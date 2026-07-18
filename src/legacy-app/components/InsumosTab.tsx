@@ -52,11 +52,11 @@ const nextCodigo = (insumos: Insumo[], tipo: Tipo) => {
   const prefix = tipoPrefix(tipo);
   const nums = insumos
     .map(i => i.codigo || '')
-    .filter(c => c.startsWith(prefix + '-'))
-    .map(c => parseInt(c.split('-')[1] || '0', 10))
+    .filter(c => new RegExp(`^${prefix}-?\\d+$`).test(c))
+    .map(c => parseInt(c.replace(prefix, '').replace(/^-/, ''), 10))
     .filter(n => !isNaN(n));
   const next = (nums.length ? Math.max(...nums) : 0) + 1;
-  return `${prefix}-${String(next).padStart(4, '0')}`;
+  return `${prefix}${String(next).padStart(4, '0')}`;
 };
 
 /* nomes pré-definidos + já cadastrados = sugestões */
