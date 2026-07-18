@@ -1405,11 +1405,12 @@ export const CostsTab: React.FC<CostsTabProps> = ({
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(8);
       doc.setTextColor(255, 255, 255);
-      doc.text('Descriçao / Gasto', 17, y + 5);
-      doc.text('Categoria', 85, y + 5);
-      doc.text('Fornecedor', 115, y + 5);
-      doc.text('Mês Ref', 145, y + 5);
-      doc.text('Total (R$)', 175, y + 5);
+      doc.text('Código', 17, y + 5);
+      doc.text('Descriçao / Gasto', 38, y + 5);
+      doc.text('Categoria', 95, y + 5);
+      doc.text('Fornecedor', 125, y + 5);
+      doc.text('Mês Ref', 152, y + 5);
+      doc.text('Total (R$)', 178, y + 5);
 
       y += 7;
 
@@ -1442,11 +1443,12 @@ export const CostsTab: React.FC<CostsTabProps> = ({
           doc.setFont('helvetica', 'bold');
           doc.setFontSize(8);
           doc.setTextColor(255, 255, 255);
-          doc.text('Descriçao / Gasto', 17, y + 5);
-          doc.text('Categoria', 85, y + 5);
-          doc.text('Fornecedor', 115, y + 5);
-          doc.text('Mês Ref', 145, y + 5);
-          doc.text('Total (R$)', 175, y + 5);
+          doc.text('Código', 17, y + 5);
+          doc.text('Descriçao / Gasto', 38, y + 5);
+          doc.text('Categoria', 95, y + 5);
+          doc.text('Fornecedor', 125, y + 5);
+          doc.text('Mês Ref', 152, y + 5);
+          doc.text('Total (R$)', 178, y + 5);
           y += 7;
           doc.setFont('helvetica', 'normal');
           doc.setFontSize(8.5);
@@ -1462,11 +1464,12 @@ export const CostsTab: React.FC<CostsTabProps> = ({
           doc.rect(15, y, 180, 7, 'F');
         }
 
-        doc.text(item.description.substring(0, 32), 17, y + 5);
-        doc.text(getExpenseCategoryPlainLabel(item.category).substring(0, 18), 85, y + 5);
-        doc.text((item.supplier || 'N/D').substring(0, 16), 115, y + 5);
-        doc.text(item.month ? formatExpenseMonth(item.month) : formatExpenseMonth(new Date(item.date).toISOString().substring(0, 7)), 145, y + 5);
-        doc.text(`R$ ${cost.toFixed(2)}`, 175, y + 5);
+        doc.text(String((item as any).code || '—').substring(0, 10), 17, y + 5);
+        doc.text(item.description.substring(0, 28), 38, y + 5);
+        doc.text(getExpenseCategoryPlainLabel(item.category).substring(0, 15), 95, y + 5);
+        doc.text((item.supplier || 'N/D').substring(0, 13), 125, y + 5);
+        doc.text(item.month ? formatExpenseMonth(item.month) : formatExpenseMonth(new Date(item.date).toISOString().substring(0, 7)), 152, y + 5);
+        doc.text(`R$ ${cost.toFixed(2)}`, 178, y + 5);
 
         y += 7;
       });
