@@ -120,6 +120,7 @@ export interface SupplyStock {
 
 export interface Expense {
   id: number;
+  code?: string;
   description: string;
   category: 'FILAMENTO' | 'EQUIPAMENTO' | 'ENERGIA' | 'EMBALAGEM' | 'FERRAMENTAS' | 'HARDWARE' | 'SERVICOS' | 'MARKETING' | 'IMPOSTOS' | 'OUTROS' | 'ACESSORIO_INSUMO';
   amount: number;

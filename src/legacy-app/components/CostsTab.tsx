@@ -270,6 +270,31 @@ export const CostsTab: React.FC<CostsTabProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Gera código sequencial para GASTO, usando o mesmo detectPrefix pelo nome
+  const genExpenseCode = (existing: Expense[], name: string = ''): string => {
+    const prefix = detectPrefix(name);
+    const re = new RegExp(`^${prefix}-?\\d+$`);
+    const nums = existing
+      .map(e => (e as any).code || '')
+      .filter((c: string) => re.test(c))
+      .map((c: string) => parseInt(c.replace(prefix, '').replace(/^-/, ''), 10))
+      .filter((n: number) => !isNaN(n));
+    const next = (nums.length ? Math.max(...nums) : 0) + 1;
+    return `${prefix}${String(next).padStart(4, '0')}`;
+  };
+
+  // Retroativo: garante código em gastos legados
+  useEffect(() => {
+    if (!expenses || expenses.length === 0) return;
+    if (expenses.every(e => (e as any).code)) return;
+    expenses.forEach(e => {
+      if (!(e as any).code) {
+        onUpdateExpense(e.id, { code: genExpenseCode(expenses, e.description) } as any);
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Lista de sugestões: SOMENTE itens já cadastrados (Gastos + Estoque de Insumos + Filamentos)
   const supplyNameSuggestions = useMemo(() => {
     const names: string[] = [];
@@ -1203,6 +1228,7 @@ export const CostsTab: React.FC<CostsTabProps> = ({
       : expenseSupplier;
 
     onAddExpense({
+      code: genExpenseCode(expenses, expenseDesc.trim()),
       description: expenseDesc.trim(),
       category: expenseCategory,
       amount: expenseAmount || 0,
@@ -1210,7 +1236,7 @@ export const CostsTab: React.FC<CostsTabProps> = ({
       date: Date.now(),
       supplier: supplierValue,
       month: expenseMonth
-    });
+    } as any);
 
     // Auto-create in Stock/Inventory if applicable and selected
     if (stockSendToInventory) {
@@ -1379,11 +1405,12 @@ export const CostsTab: React.FC<CostsTabProps> = ({
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(8);
       doc.setTextColor(255, 255, 255);
-      doc.text('Descriçao / Gasto', 17, y + 5);
-      doc.text('Categoria', 85, y + 5);
-      doc.text('Fornecedor', 115, y + 5);
-      doc.text('Mês Ref', 145, y + 5);
-      doc.text('Total (R$)', 175, y + 5);
+      doc.text('Código', 17, y + 5);
+      doc.text('Descriçao / Gasto', 38, y + 5);
+      doc.text('Categoria', 95, y + 5);
+      doc.text('Fornecedor', 125, y + 5);
+      doc.text('Mês Ref', 152, y + 5);
+      doc.text('Total (R$)', 178, y + 5);
 
       y += 7;
 
@@ -1416,11 +1443,12 @@ export const CostsTab: React.FC<CostsTabProps> = ({
           doc.setFont('helvetica', 'bold');
           doc.setFontSize(8);
           doc.setTextColor(255, 255, 255);
-          doc.text('Descriçao / Gasto', 17, y + 5);
-          doc.text('Categoria', 85, y + 5);
-          doc.text('Fornecedor', 115, y + 5);
-          doc.text('Mês Ref', 145, y + 5);
-          doc.text('Total (R$)', 175, y + 5);
+          doc.text('Código', 17, y + 5);
+          doc.text('Descriçao / Gasto', 38, y + 5);
+          doc.text('Categoria', 95, y + 5);
+          doc.text('Fornecedor', 125, y + 5);
+          doc.text('Mês Ref', 152, y + 5);
+          doc.text('Total (R$)', 178, y + 5);
           y += 7;
           doc.setFont('helvetica', 'normal');
           doc.setFontSize(8.5);
@@ -1436,11 +1464,12 @@ export const CostsTab: React.FC<CostsTabProps> = ({
           doc.rect(15, y, 180, 7, 'F');
         }
 
-        doc.text(item.description.substring(0, 32), 17, y + 5);
-        doc.text(getExpenseCategoryPlainLabel(item.category).substring(0, 18), 85, y + 5);
-        doc.text((item.supplier || 'N/D').substring(0, 16), 115, y + 5);
-        doc.text(item.month ? formatExpenseMonth(item.month) : formatExpenseMonth(new Date(item.date).toISOString().substring(0, 7)), 145, y + 5);
-        doc.text(`R$ ${cost.toFixed(2)}`, 175, y + 5);
+        doc.text(String((item as any).code || '—').substring(0, 10), 17, y + 5);
+        doc.text(item.description.substring(0, 28), 38, y + 5);
+        doc.text(getExpenseCategoryPlainLabel(item.category).substring(0, 15), 95, y + 5);
+        doc.text((item.supplier || 'N/D').substring(0, 13), 125, y + 5);
+        doc.text(item.month ? formatExpenseMonth(item.month) : formatExpenseMonth(new Date(item.date).toISOString().substring(0, 7)), 152, y + 5);
+        doc.text(`R$ ${cost.toFixed(2)}`, 178, y + 5);
 
         y += 7;
       });
@@ -4533,6 +4562,11 @@ Utilize a nossa nova calculadora de formação de preço de produtos para obter 
                     <div key={item.id} className="p-3 bg-[#0C0E0D] border border-[#232B27]/70 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-emerald-500/20 transition-colors duration-200">
                       <div className="space-y-1">
                         <div className="flex flex-wrap gap-1.5 items-center">
+                          {(item as any).code && (
+                            <span className="text-[8.5px] font-mono font-black bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded text-emerald-300">
+                              {(item as any).code}
+                            </span>
+                          )}
                           <span className="text-[8.5px] font-mono font-black bg-[#b7ff00]/10 border border-[#b7ff00]/25 px-2 py-0.5 rounded text-[#b7ff00]">
                             {getExpenseCategoryLabel(item.category)}
                           </span>
@@ -4980,6 +5014,12 @@ Utilize a nossa nova calculadora de formação de preço de produtos para obter 
             </div>
 
             <form onSubmit={handleSaveEditExpense} className="space-y-4">
+              {(editingExpense as any)?.code && (
+                <div className="flex items-center gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3 py-2">
+                  <span className="text-[9px] uppercase tracking-widest text-emerald-300/70 font-mono">Código</span>
+                  <span className="text-xs font-mono font-black text-emerald-300">{(editingExpense as any).code}</span>
+                </div>
+              )}
               <div className="space-y-1">
                 <label className="text-[10px] text-[#8BA58D] block">Descrição / Item Lançado</label>
                 <input
