@@ -3929,6 +3929,8 @@ Utilize a nossa nova calculadora de formação de preço de produtos para obter 
                     placeholder="Ex: Caixa Kraft Correios 16x11x6"
                     value={sName}
                     onChange={(e) => setSName(e.target.value)}
+                    list="supply-name-suggest"
+                    autoComplete="off"
                     className="w-full bg-[#151917] border border-[#232B27] px-2.5 py-1.5 rounded-lg text-xs text-white"
                   />
                 </div>
