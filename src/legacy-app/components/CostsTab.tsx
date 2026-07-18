@@ -5014,6 +5014,12 @@ Utilize a nossa nova calculadora de formação de preço de produtos para obter 
             </div>
 
             <form onSubmit={handleSaveEditExpense} className="space-y-4">
+              {(editingExpense as any)?.code && (
+                <div className="flex items-center gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3 py-2">
+                  <span className="text-[9px] uppercase tracking-widest text-emerald-300/70 font-mono">Código</span>
+                  <span className="text-xs font-mono font-black text-emerald-300">{(editingExpense as any).code}</span>
+                </div>
+              )}
               <div className="space-y-1">
                 <label className="text-[10px] text-[#8BA58D] block">Descrição / Item Lançado</label>
                 <input
