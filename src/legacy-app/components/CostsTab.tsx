@@ -230,15 +230,29 @@ export const CostsTab: React.FC<CostsTabProps> = ({
     'Filtro de Ar HEPA','Placa PEI','Placa Vidro','Cola PEI','Chave Allen Kit','Bandeja Cura UV',
   ];
 
-  // Gera próximo código sequencial para SupplyStock (INS-0001, INS-0002, ...)
-  const genSupplyCode = (existing: SupplyStock[]): string => {
+  // Detecta prefixo pela categoria/nome do insumo
+  const detectPrefix = (name: string): string => {
+    const n = (name || '').toLowerCase();
+    if (/\b(pla|petg|abs|asa|tpu|nylon|pc|filamento)\b/.test(n)) return 'FIL';
+    if (/resina/.test(n)) return 'RES';
+    if (/(embalag|caixa|envelope|saco|bolha|fita|etiqueta)/.test(n)) return 'EMB';
+    if (/(bico|correia|rolamento|parafuso|porca|inserto|ímã|ima |placa pei|placa vidro|hepa)/.test(n)) return 'HAR';
+    if (/(lixa|tinta|primer|cola|álcool|alcool|spray)/.test(n)) return 'ACB';
+    if (/(chave|allen|estilete|lâmina|lamina|kit|bandeja)/.test(n)) return 'FER';
+    return 'INS';
+  };
+
+  // Gera próximo código sequencial por categoria: FIL0001, RES0001, EMB0001, INS0001...
+  const genSupplyCode = (existing: SupplyStock[], name: string = ''): string => {
+    const prefix = detectPrefix(name);
+    const re = new RegExp(`^${prefix}-?\\d+$`);
     const nums = existing
       .map(s => (s as any).code || '')
-      .filter((c: string) => /^INS-\d+$/.test(c))
-      .map((c: string) => parseInt(c.split('-')[1], 10))
+      .filter((c: string) => re.test(c))
+      .map((c: string) => parseInt(c.replace(prefix, '').replace(/^-/, ''), 10))
       .filter((n: number) => !isNaN(n));
     const next = (nums.length ? Math.max(...nums) : 0) + 1;
-    return `INS-${String(next).padStart(4, '0')}`;
+    return `${prefix}${String(next).padStart(4, '0')}`;
   };
 
   // Retroativo: garante código em insumos legados sem code
@@ -248,7 +262,7 @@ export const CostsTab: React.FC<CostsTabProps> = ({
     setSuppliesStocks(prev => {
       const withCodes = [...prev];
       withCodes.forEach((s, idx) => {
-        if (!(s as any).code) (withCodes[idx] as any) = { ...s, code: genSupplyCode(withCodes.slice(0, idx).concat(withCodes.slice(idx + 1))) };
+        if (!(s as any).code) (withCodes[idx] as any) = { ...s, code: genSupplyCode(withCodes.slice(0, idx).concat(withCodes.slice(idx + 1)), s.name) };
       });
       return withCodes;
     });
@@ -1002,7 +1016,7 @@ export const CostsTab: React.FC<CostsTabProps> = ({
     if (!sName.trim()) return;
     const newSupply: SupplyStock = {
       id: suppliesStocks.length > 0 ? Math.max(...suppliesStocks.map(s => s.id)) + 1 : 1,
-      code: genSupplyCode(suppliesStocks),
+      code: genSupplyCode(suppliesStocks, sName.trim()),
       name: sName.trim(),
       stockCount: sCount,
       minStockCount: sMinCount,
@@ -1184,7 +1198,7 @@ export const CostsTab: React.FC<CostsTabProps> = ({
       } else if (expenseCategory === 'ACESSORIO_INSUMO') {
         const newSupply: SupplyStock = {
           id: suppliesStocks.length > 0 ? Math.max(...suppliesStocks.map(s => s.id)) + 1 : 1,
-          code: genSupplyCode(suppliesStocks),
+          code: genSupplyCode(suppliesStocks, expenseDesc.trim()),
           name: expenseDesc.trim(),
           stockCount: expenseQty || 1,
           minStockCount: stockSupplyMinAlert,
@@ -1269,7 +1283,7 @@ export const CostsTab: React.FC<CostsTabProps> = ({
       } else if (editExpenseCategory === 'ACESSORIO_INSUMO') {
         const newSupply: SupplyStock = {
           id: suppliesStocks.length > 0 ? Math.max(...suppliesStocks.map(s => s.id)) + 1 : 1,
-          code: genSupplyCode(suppliesStocks),
+          code: genSupplyCode(suppliesStocks, editExpenseDesc.trim()),
           name: editExpenseDesc.trim(),
           stockCount: editExpenseQty || 1,
           minStockCount: editStockSupplyMinAlert,
