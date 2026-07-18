@@ -219,6 +219,48 @@ export const CostsTab: React.FC<CostsTabProps> = ({
   const [sImage, setSImage] = useState('');
   const [showAddSupplyForm, setShowAddSupplyForm] = useState(false);
 
+  // Sugestões pré-definidas para autocomplete de nomes de insumos/gastos
+  const SUPPLY_NAME_PRESETS = [
+    'Caixa Kraft Correios 16x11x6','Caixa Kraft Correios 18x13x9','Caixa Papelão P','Caixa Papelão M','Caixa Papelão G',
+    'Envelope Bolha','Plástico Bolha (m)','Saco Plástico Zip','Fita Adesiva Transparente','Fita Kraft','Etiqueta Térmica 100x150',
+    'Cola Bastão','Cola Instantânea Super Bonder','Cola de Contato','Spray Fixador de Impressão','Álcool Isopropílico 1L',
+    'Bico Latão 0.4mm','Bico Endurecido 0.4mm','Bico 0.6mm','Bico 0.8mm','Correia GT2 (m)','Rolamento 608ZZ','Lâmina de Estilete',
+    'Ímã Neodímio 6x2mm','Ímã Neodímio 10x2mm','Parafuso M3x8','Parafuso M3x12','Porca M3','Inserto de Latão M3',
+    'Lixa 400','Lixa 600','Lixa 1000','Lixa 2000','Tinta Spray Preta','Tinta Spray Branca','Primer Spray',
+    'Filtro de Ar HEPA','Placa PEI','Placa Vidro','Cola PEI','Chave Allen Kit','Bandeja Cura UV',
+  ];
+
+  // Gera próximo código sequencial para SupplyStock (INS-0001, INS-0002, ...)
+  const genSupplyCode = (existing: SupplyStock[]): string => {
+    const nums = existing
+      .map(s => (s as any).code || '')
+      .filter((c: string) => /^INS-\d+$/.test(c))
+      .map((c: string) => parseInt(c.split('-')[1], 10))
+      .filter((n: number) => !isNaN(n));
+    const next = (nums.length ? Math.max(...nums) : 0) + 1;
+    return `INS-${String(next).padStart(4, '0')}`;
+  };
+
+  // Retroativo: garante código em insumos legados sem code
+  useEffect(() => {
+    if (!suppliesStocks || suppliesStocks.length === 0) return;
+    if (suppliesStocks.every(s => (s as any).code)) return;
+    setSuppliesStocks(prev => {
+      const withCodes = [...prev];
+      withCodes.forEach((s, idx) => {
+        if (!(s as any).code) (withCodes[idx] as any) = { ...s, code: genSupplyCode(withCodes.slice(0, idx).concat(withCodes.slice(idx + 1))) };
+      });
+      return withCodes;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Lista de sugestões para os campos de nome (presets + já cadastrados)
+  const supplyNameSuggestions = useMemo(() => {
+    const set = new Set<string>([...SUPPLY_NAME_PRESETS, ...suppliesStocks.map(s => s.name).filter(Boolean)]);
+    return Array.from(set).sort();
+  }, [suppliesStocks]);
+
   // Fallbacks client-side to guarantee at least 5 items
   const getClientFallbackOffers = (type: string) => {
     const cleanType = String(type || '').toUpperCase();
