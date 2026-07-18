@@ -4184,8 +4184,13 @@ Utilize a nossa nova calculadora de formação de preço de produtos para obter 
                     placeholder="Ex: Refil 1kg PLA Branco GTMax"
                     value={expenseDesc}
                     onChange={(e) => setExpenseDesc(e.target.value)}
+                    list="supply-name-suggest"
+                    autoComplete="off"
                     className="w-full bg-[#0C0E0D] border border-[#232B27] rounded-xl px-3 py-1.5 text-xs text-white outline-none"
                   />
+                  <datalist id="supply-name-suggest">
+                    {supplyNameSuggestions.map(n => <option key={n} value={n} />)}
+                  </datalist>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
