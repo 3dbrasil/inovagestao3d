@@ -269,10 +269,18 @@ export const CostsTab: React.FC<CostsTabProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Lista de sugestões para os campos de nome (presets + já cadastrados)
+  // Lista de sugestões: SOMENTE itens já cadastrados (Gastos + Estoque de Insumos)
   const supplyNameSuggestions = useMemo(() => {
-    const set = new Set<string>([...SUPPLY_NAME_PRESETS, ...suppliesStocks.map(s => s.name).filter(Boolean)]);
-    return Array.from(set).sort();
+    const names: string[] = [];
+    suppliesStocks.forEach(s => { if (s.name) names.push(s.name); });
+    try {
+      const raw = typeof window !== 'undefined' ? localStorage.getItem('insumos_v1') : null;
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        (parsed?.insumos || []).forEach((i: any) => { if (i?.nome) names.push(i.nome); });
+      }
+    } catch {}
+    return Array.from(new Set(names)).sort();
   }, [suppliesStocks]);
 
   // Fallbacks client-side to guarantee at least 5 items
