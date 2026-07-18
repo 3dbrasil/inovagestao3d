@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { FilamentStock, ShoppingItem, MaterialProfile, SupplyStock, CatalogItem, Expense } from '../types';
 import { staticFilamentOffers, initialMaterialProfiles, initialCatalogItems } from '../utils/initialData';
 import { getApiUrl, checkIsAndroidWebView } from '../utils/api';
