@@ -110,6 +110,7 @@ export interface FilamentStock {
 
 export interface SupplyStock {
   id: number;
+  code?: string;
   name: string;
   stockCount: number;
   minStockCount: number;

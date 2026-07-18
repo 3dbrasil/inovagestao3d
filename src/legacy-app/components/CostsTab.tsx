@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { FilamentStock, ShoppingItem, MaterialProfile, SupplyStock, CatalogItem, Expense } from '../types';
 import { staticFilamentOffers, initialMaterialProfiles, initialCatalogItems } from '../utils/initialData';
 import { getApiUrl, checkIsAndroidWebView } from '../utils/api';
@@ -218,6 +218,48 @@ export const CostsTab: React.FC<CostsTabProps> = ({
   const [sUnitCost, setSUnitCost] = useState(2.50);
   const [sImage, setSImage] = useState('');
   const [showAddSupplyForm, setShowAddSupplyForm] = useState(false);
+
+  // Sugestões pré-definidas para autocomplete de nomes de insumos/gastos
+  const SUPPLY_NAME_PRESETS = [
+    'Caixa Kraft Correios 16x11x6','Caixa Kraft Correios 18x13x9','Caixa Papelão P','Caixa Papelão M','Caixa Papelão G',
+    'Envelope Bolha','Plástico Bolha (m)','Saco Plástico Zip','Fita Adesiva Transparente','Fita Kraft','Etiqueta Térmica 100x150',
+    'Cola Bastão','Cola Instantânea Super Bonder','Cola de Contato','Spray Fixador de Impressão','Álcool Isopropílico 1L',
+    'Bico Latão 0.4mm','Bico Endurecido 0.4mm','Bico 0.6mm','Bico 0.8mm','Correia GT2 (m)','Rolamento 608ZZ','Lâmina de Estilete',
+    'Ímã Neodímio 6x2mm','Ímã Neodímio 10x2mm','Parafuso M3x8','Parafuso M3x12','Porca M3','Inserto de Latão M3',
+    'Lixa 400','Lixa 600','Lixa 1000','Lixa 2000','Tinta Spray Preta','Tinta Spray Branca','Primer Spray',
+    'Filtro de Ar HEPA','Placa PEI','Placa Vidro','Cola PEI','Chave Allen Kit','Bandeja Cura UV',
+  ];
+
+  // Gera próximo código sequencial para SupplyStock (INS-0001, INS-0002, ...)
+  const genSupplyCode = (existing: SupplyStock[]): string => {
+    const nums = existing
+      .map(s => (s as any).code || '')
+      .filter((c: string) => /^INS-\d+$/.test(c))
+      .map((c: string) => parseInt(c.split('-')[1], 10))
+      .filter((n: number) => !isNaN(n));
+    const next = (nums.length ? Math.max(...nums) : 0) + 1;
+    return `INS-${String(next).padStart(4, '0')}`;
+  };
+
+  // Retroativo: garante código em insumos legados sem code
+  useEffect(() => {
+    if (!suppliesStocks || suppliesStocks.length === 0) return;
+    if (suppliesStocks.every(s => (s as any).code)) return;
+    setSuppliesStocks(prev => {
+      const withCodes = [...prev];
+      withCodes.forEach((s, idx) => {
+        if (!(s as any).code) (withCodes[idx] as any) = { ...s, code: genSupplyCode(withCodes.slice(0, idx).concat(withCodes.slice(idx + 1))) };
+      });
+      return withCodes;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Lista de sugestões para os campos de nome (presets + já cadastrados)
+  const supplyNameSuggestions = useMemo(() => {
+    const set = new Set<string>([...SUPPLY_NAME_PRESETS, ...suppliesStocks.map(s => s.name).filter(Boolean)]);
+    return Array.from(set).sort();
+  }, [suppliesStocks]);
 
   // Fallbacks client-side to guarantee at least 5 items
   const getClientFallbackOffers = (type: string) => {
@@ -960,6 +1002,7 @@ export const CostsTab: React.FC<CostsTabProps> = ({
     if (!sName.trim()) return;
     const newSupply: SupplyStock = {
       id: suppliesStocks.length > 0 ? Math.max(...suppliesStocks.map(s => s.id)) + 1 : 1,
+      code: genSupplyCode(suppliesStocks),
       name: sName.trim(),
       stockCount: sCount,
       minStockCount: sMinCount,
@@ -1141,6 +1184,7 @@ export const CostsTab: React.FC<CostsTabProps> = ({
       } else if (expenseCategory === 'ACESSORIO_INSUMO') {
         const newSupply: SupplyStock = {
           id: suppliesStocks.length > 0 ? Math.max(...suppliesStocks.map(s => s.id)) + 1 : 1,
+          code: genSupplyCode(suppliesStocks),
           name: expenseDesc.trim(),
           stockCount: expenseQty || 1,
           minStockCount: stockSupplyMinAlert,
@@ -1225,6 +1269,7 @@ export const CostsTab: React.FC<CostsTabProps> = ({
       } else if (editExpenseCategory === 'ACESSORIO_INSUMO') {
         const newSupply: SupplyStock = {
           id: suppliesStocks.length > 0 ? Math.max(...suppliesStocks.map(s => s.id)) + 1 : 1,
+          code: genSupplyCode(suppliesStocks),
           name: editExpenseDesc.trim(),
           stockCount: editExpenseQty || 1,
           minStockCount: editStockSupplyMinAlert,
@@ -3884,6 +3929,8 @@ Utilize a nossa nova calculadora de formação de preço de produtos para obter 
                     placeholder="Ex: Caixa Kraft Correios 16x11x6"
                     value={sName}
                     onChange={(e) => setSName(e.target.value)}
+                    list="supply-name-suggest"
+                    autoComplete="off"
                     className="w-full bg-[#151917] border border-[#232B27] px-2.5 py-1.5 rounded-lg text-xs text-white"
                   />
                 </div>
@@ -4004,6 +4051,11 @@ Utilize a nossa nova calculadora de formação de preço de produtos para obter 
                     <div className="space-y-1 flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
                         <Box className="h-3.5 w-3.5 text-[#b7ff00]" />
+                        {(sup as any).code && (
+                          <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-[#b7ff00]/10 text-[#b7ff00] border border-[#b7ff00]/25">
+                            {(sup as any).code}
+                          </span>
+                        )}
                         <span className="text-xs font-bold text-white leading-tight">{sup.name}</span>
                         {low && <span className="text-[7.5px] font-mono uppercase bg-red-400/15 text-red-400 border border-red-500/30 px-1.5 py-0.5 rounded animate-pulse font-black">Estoque Baixo 🚨</span>}
                       </div>
@@ -4139,8 +4191,13 @@ Utilize a nossa nova calculadora de formação de preço de produtos para obter 
                     placeholder="Ex: Refil 1kg PLA Branco GTMax"
                     value={expenseDesc}
                     onChange={(e) => setExpenseDesc(e.target.value)}
+                    list="supply-name-suggest"
+                    autoComplete="off"
                     className="w-full bg-[#0C0E0D] border border-[#232B27] rounded-xl px-3 py-1.5 text-xs text-white outline-none"
                   />
+                  <datalist id="supply-name-suggest">
+                    {supplyNameSuggestions.map(n => <option key={n} value={n} />)}
+                  </datalist>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
