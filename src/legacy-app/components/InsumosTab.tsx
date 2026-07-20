@@ -318,8 +318,10 @@ export const InsumosTab: React.FC = () => {
       <SectionTitle icon={Package} title="Estoque de Insumos" status="Local" />
 
       {/* KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <Kpi icon={Package} label="Insumos Cadastrados" value={String(kpis.total)} tone="lime" />
+        <Kpi icon={Package} label="Total Filamento" value={`${kpis.totalKgFil.toFixed(2)} kg`} tone="blue" />
+        <Kpi icon={Package} label="Outros Itens" value={String(kpis.outrosCount)} tone="purple" />
         <Kpi icon={AlertTriangle} label="Abaixo do Mínimo" value={String(kpis.baixo)} tone={kpis.baixo > 0 ? 'orange' : 'emerald'} />
         <Kpi icon={ArrowUpCircle} label="Valor em Estoque" value={brl(kpis.valor)} tone="emerald" />
       </div>
@@ -337,6 +339,7 @@ export const InsumosTab: React.FC = () => {
           <option value="outros">Outros</option>
         </Select>
         <Btn onClick={openCreate}><Plus className="inline w-3 h-3 mr-1" /> Novo Insumo</Btn>
+        <Btn tone="ghost" onClick={abrirRelatorio}><FileText className="inline w-3 h-3 mr-1" /> Relatório de Gestão</Btn>
       </div>
 
       {/* Table / empty */}
@@ -359,6 +362,7 @@ export const InsumosTab: React.FC = () => {
                 <th className="text-left p-3">Cor</th>
                 <th className="text-right p-3">Peso (g)</th>
                 <th className="text-right p-3">Estoque</th>
+                <th className="text-right p-3">Total (kg)</th>
                 <th className="text-right p-3">Custo Unit.</th>
                 <th className="text-right p-3">Ações</th>
               </tr>
@@ -386,6 +390,7 @@ export const InsumosTab: React.FC = () => {
                         ? <Badge tone="red">{num(i.quantidade_estoque)} un.</Badge>
                         : <span className="text-[#b7ff00] font-bold tabular-nums">{num(i.quantidade_estoque)} un.</span>}
                     </td>
+                    <td className="p-3 text-right text-white/80 tabular-nums">{kg2(Number(i.quantidade_estoque || 0) * Number(i.peso_liquido_g || 0))} kg</td>
                     <td className="p-3 text-right text-zinc-300 tabular-nums">{brl(i.custo_unitario)}</td>
                     <td className="p-3">
                       <div className="flex items-center justify-end gap-1.5">
