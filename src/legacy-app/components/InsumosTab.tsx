@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Package, Plus, Trash2, Edit3, History, AlertTriangle, Minus,
-  ArrowDownCircle, ArrowUpCircle, Search, X,
+  ArrowDownCircle, ArrowUpCircle, Search, X, FileText,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { SectionTitle, Kpi } from './DashboardShell';
@@ -43,8 +43,27 @@ const load = (): State => {
 };
 const save = (s: State) => { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch {} };
 const uid = () => Math.random().toString(36).slice(2, 10);
-const brl = (n: number) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const brl = (n: number) =>
+  Number(n || 0).toLocaleString('pt-BR', {
+    style: 'currency', currency: 'BRL',
+    minimumFractionDigits: 2, maximumFractionDigits: 2,
+  });
+const kg2 = (g: number) => (Number(g || 0) / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const num = (n: number) => Number(n || 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+
+/* ---------- ordenação por família de cor (branco perto de branco, etc.) ---------- */
+const COLOR_ORDER = [
+  'branco','off','creme','bege','pele','marfim','amarelo','ouro','dourado','laranja','coral',
+  'vermelho','bordo','rosa','magenta','roxo','violeta','lilas','azul','ciano','turquesa',
+  'verde','oliva','marrom','cafe','cinza','prata','preto','fumaca','transparente','natural','silk',
+];
+const norm = (s: string) => String(s || '')
+  .toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+const colorRank = (c: string) => {
+  const n = norm(c);
+  for (let i = 0; i < COLOR_ORDER.length; i++) if (n.includes(COLOR_ORDER[i])) return i;
+  return 999;
+};
 
 /* ---------- código automático ---------- */
 const tipoPrefix = (t: Tipo) => (t === 'filamento' ? 'FIL' : t === 'resina' ? 'RES' : 'INS');
