@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Package, Plus, Trash2, Edit3, History, AlertTriangle, Minus,
-  ArrowDownCircle, ArrowUpCircle, Search, X,
+  ArrowDownCircle, ArrowUpCircle, Search, X, FileText,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { SectionTitle, Kpi } from './DashboardShell';
@@ -43,8 +43,27 @@ const load = (): State => {
 };
 const save = (s: State) => { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch {} };
 const uid = () => Math.random().toString(36).slice(2, 10);
-const brl = (n: number) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const brl = (n: number) =>
+  Number(n || 0).toLocaleString('pt-BR', {
+    style: 'currency', currency: 'BRL',
+    minimumFractionDigits: 2, maximumFractionDigits: 2,
+  });
+const kg2 = (g: number) => (Number(g || 0) / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const num = (n: number) => Number(n || 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+
+/* ---------- ordenação por família de cor (branco perto de branco, etc.) ---------- */
+const COLOR_ORDER = [
+  'branco','off','creme','bege','pele','marfim','amarelo','ouro','dourado','laranja','coral',
+  'vermelho','bordo','rosa','magenta','roxo','violeta','lilas','azul','ciano','turquesa',
+  'verde','oliva','marrom','cafe','cinza','prata','preto','fumaca','transparente','natural','silk',
+];
+const norm = (s: string) => String(s || '')
+  .toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+const colorRank = (c: string) => {
+  const n = norm(c);
+  for (let i = 0; i < COLOR_ORDER.length; i++) if (n.includes(COLOR_ORDER[i])) return i;
+  return 999;
+};
 
 /* ---------- código automático ---------- */
 const tipoPrefix = (t: Tipo) => (t === 'filamento' ? 'FIL' : t === 'resina' ? 'RES' : 'INS');
@@ -211,18 +230,85 @@ export const InsumosTab: React.FC = () => {
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
-    return state.insumos.filter(i =>
+    const list = state.insumos.filter(i =>
       (filter === 'todos' || i.tipo === filter) &&
       (!q || [i.nome, i.material, i.cor, i.fornecedor].filter(Boolean).some(v => String(v).toLowerCase().includes(q)))
     );
+    // Filamentos: agrupa por família de cor (branco perto de branco...); demais tipos por nome.
+    return list.sort((a, b) => {
+      const ta = a.tipo === 'filamento' ? 0 : a.tipo === 'resina' ? 1 : 2;
+      const tb = b.tipo === 'filamento' ? 0 : b.tipo === 'resina' ? 1 : 2;
+      if (ta !== tb) return ta - tb;
+      if (a.tipo === 'filamento') {
+        const cr = colorRank(a.cor) - colorRank(b.cor);
+        if (cr !== 0) return cr;
+        const mc = String(a.material || '').localeCompare(String(b.material || ''));
+        if (mc !== 0) return mc;
+      }
+      return String(a.nome || '').localeCompare(String(b.nome || ''));
+    });
   }, [state.insumos, search, filter]);
 
   const kpis = useMemo(() => {
     const total = state.insumos.length;
     const baixo = state.insumos.filter(i => Number(i.quantidade_estoque) < Number(i.minimo || 0.3)).length;
     const valor = state.insumos.reduce((s, i) => s + Number(i.quantidade_estoque || 0) * Number(i.custo_unitario || 0), 0);
-    return { total, baixo, valor };
+    const totalKgFil = state.insumos
+      .filter(i => i.tipo === 'filamento')
+      .reduce((s, i) => s + Number(i.quantidade_estoque || 0) * Number(i.peso_liquido_g || 0) / 1000, 0);
+    const outrosCount = state.insumos.filter(i => i.tipo !== 'filamento' && i.tipo !== 'resina').length;
+    return { total, baixo, valor, totalKgFil, outrosCount };
   }, [state.insumos]);
+
+  const abrirRelatorio = () => {
+    const linhas = filtered.map(i => {
+      const kg = Number(i.quantidade_estoque || 0) * Number(i.peso_liquido_g || 0) / 1000;
+      const valor = Number(i.quantidade_estoque || 0) * Number(i.custo_unitario || 0);
+      return `<tr>
+        <td>${i.codigo || '—'}</td>
+        <td>${i.nome}</td>
+        <td>${i.tipo}</td>
+        <td>${i.material || ''}</td>
+        <td>${i.cor || ''}</td>
+        <td style="text-align:right">${num(i.quantidade_estoque)}</td>
+        <td style="text-align:right">${kg.toFixed(2)}</td>
+        <td style="text-align:right">${brl(i.custo_unitario)}</td>
+        <td style="text-align:right">${brl(valor)}</td>
+      </tr>`;
+    }).join('');
+    const total = filtered.reduce((s, i) => s + Number(i.quantidade_estoque || 0) * Number(i.custo_unitario || 0), 0);
+    const totalKg = filtered.filter(i => i.tipo === 'filamento').reduce((s, i) => s + Number(i.quantidade_estoque || 0) * Number(i.peso_liquido_g || 0) / 1000, 0);
+    const html = `<!doctype html><html><head><meta charset="utf-8"/><title>Relatório de Gestão — Estoque</title>
+      <style>
+        body{font-family:Arial,sans-serif;padding:24px;color:#111}
+        h1{font-size:18px;margin:0 0 4px} h2{font-size:12px;color:#666;margin:0 0 16px;font-weight:normal}
+        table{width:100%;border-collapse:collapse;font-size:11px}
+        th,td{padding:6px 8px;border-bottom:1px solid #e5e5e5;text-align:left}
+        th{background:#f5f5f5;text-transform:uppercase;font-size:9px;letter-spacing:.08em}
+        tfoot td{font-weight:bold;background:#fafafa}
+      </style></head><body>
+      <h1>Relatório de Gestão — Estoque</h1>
+      <h2>Gerado em ${new Date().toLocaleString('pt-BR')} · ${filtered.length} itens</h2>
+      <table>
+        <thead><tr>
+          <th>Código</th><th>Nome</th><th>Tipo</th><th>Material</th><th>Cor</th>
+          <th style="text-align:right">Qtd</th><th style="text-align:right">Kg</th>
+          <th style="text-align:right">Custo Unit.</th><th style="text-align:right">Valor</th>
+        </tr></thead>
+        <tbody>${linhas}</tbody>
+        <tfoot><tr>
+          <td colspan="6">Totais</td>
+          <td style="text-align:right">${totalKg.toFixed(2)} kg</td>
+          <td></td>
+          <td style="text-align:right">${brl(total)}</td>
+        </tr></tfoot>
+      </table>
+      <script>window.onload=()=>{setTimeout(()=>window.print(),300)}</script>
+      </body></html>`;
+    const w = window.open('', '_blank');
+    if (!w) { toast.error('Bloqueado pelo navegador'); return; }
+    w.document.open(); w.document.write(html); w.document.close();
+  };
 
   const movsOf = (id: string) => state.movs.filter(m => m.insumo_id === id).sort((a, b) => b.data.localeCompare(a.data));
   const insumoOf = (id: string | null) => state.insumos.find(i => i.id === id);
@@ -232,8 +318,10 @@ export const InsumosTab: React.FC = () => {
       <SectionTitle icon={Package} title="Estoque de Insumos" status="Local" />
 
       {/* KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <Kpi icon={Package} label="Insumos Cadastrados" value={String(kpis.total)} tone="lime" />
+        <Kpi icon={Package} label="Total Filamento" value={`${kpis.totalKgFil.toFixed(2)} kg`} tone="blue" />
+        <Kpi icon={Package} label="Outros Itens" value={String(kpis.outrosCount)} tone="purple" />
         <Kpi icon={AlertTriangle} label="Abaixo do Mínimo" value={String(kpis.baixo)} tone={kpis.baixo > 0 ? 'orange' : 'emerald'} />
         <Kpi icon={ArrowUpCircle} label="Valor em Estoque" value={brl(kpis.valor)} tone="emerald" />
       </div>
@@ -251,6 +339,7 @@ export const InsumosTab: React.FC = () => {
           <option value="outros">Outros</option>
         </Select>
         <Btn onClick={openCreate}><Plus className="inline w-3 h-3 mr-1" /> Novo Insumo</Btn>
+        <Btn tone="ghost" onClick={abrirRelatorio}><FileText className="inline w-3 h-3 mr-1" /> Relatório de Gestão</Btn>
       </div>
 
       {/* Table / empty */}
@@ -273,6 +362,7 @@ export const InsumosTab: React.FC = () => {
                 <th className="text-left p-3">Cor</th>
                 <th className="text-right p-3">Peso (g)</th>
                 <th className="text-right p-3">Estoque</th>
+                <th className="text-right p-3">Total (kg)</th>
                 <th className="text-right p-3">Custo Unit.</th>
                 <th className="text-right p-3">Ações</th>
               </tr>
@@ -300,6 +390,7 @@ export const InsumosTab: React.FC = () => {
                         ? <Badge tone="red">{num(i.quantidade_estoque)} un.</Badge>
                         : <span className="text-[#b7ff00] font-bold tabular-nums">{num(i.quantidade_estoque)} un.</span>}
                     </td>
+                    <td className="p-3 text-right text-white/80 tabular-nums">{kg2(Number(i.quantidade_estoque || 0) * Number(i.peso_liquido_g || 0))} kg</td>
                     <td className="p-3 text-right text-zinc-300 tabular-nums">{brl(i.custo_unitario)}</td>
                     <td className="p-3">
                       <div className="flex items-center justify-end gap-1.5">
