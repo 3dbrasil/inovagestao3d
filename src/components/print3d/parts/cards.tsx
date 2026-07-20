@@ -398,13 +398,22 @@ export function FilamentQuotes({ onSelectTab }: { onSelectTab?: (t: number) => v
     const prices = offers.map((o: any) => Number(o.price) || 0).filter((n: number) => n > 0);
     const avg = prices.length ? prices.reduce((a: number, b: number) => a + b, 0) / prices.length : 0;
     const min = prices.length ? Math.min(...prices) : 0;
-    return { name: g.type || "—", price: avg, min, count: offers.length };
+    const cheapest = prices.length
+      ? offers.reduce((best: any, o: any) => (Number(o.price) > 0 && (!best || Number(o.price) < Number(best.price)) ? o : best), null as any)
+      : null;
+    return { name: g.type || "—", price: avg, min, count: offers.length, cheapest };
   });
+  const openQuotation = () => {
+    try { localStorage.setItem("bambuzau_costs_subtab_override", "QUOTE"); } catch {}
+    try { window.dispatchEvent(new CustomEvent("navigate-costs-subtab", { detail: "QUOTE" })); } catch {}
+    try { window.dispatchEvent(new CustomEvent("costs_set_subtab", { detail: "QUOTE" })); } catch {}
+    onSelectTab?.(4);
+  };
   return (
-    <Card glow="#047857" className="cursor-pointer transition" onClick={() => onSelectTab?.(7)}>
+    <Card glow="#047857" className="cursor-pointer transition" onClick={openQuotation}>
       <div className="flex items-baseline justify-between mb-1">
         <h3 className="text-[14px] font-semibold text-white">Cotação de Filamentos</h3>
-        <span className="text-[10px] text-white/40">SerpAPI</span>
+        <span className="text-[10px] text-emerald-300/80">Menor preço</span>
       </div>
       <p className="text-[11px] text-white/45 mb-4">{updatedAt ? `Atualizado em ${updatedAt}` : "Aguardando primeira sincronização…"}</p>
       {rows.length === 0 && (
@@ -412,15 +421,26 @@ export function FilamentQuotes({ onSelectTab }: { onSelectTab?: (t: number) => v
       )}
       <ul className="space-y-2.5">
         {rows.map((q, i) => (
-          <li key={i} className="flex items-center gap-3 text-[12.5px]">
+          <li
+            key={i}
+            className="flex items-center gap-3 text-[12.5px] rounded-md px-1 -mx-1 hover:bg-white/[0.04] transition"
+            onClick={(e) => { e.stopPropagation(); if (q.cheapest?.buyUrl) window.open(q.cheapest.buyUrl, "_blank", "noopener"); else openQuotation(); }}
+            title={q.cheapest?.productName || "Ver cotação"}
+          >
             <FilamentSpool type={q.name} color={materialColor(q.name)} size={28} className="shrink-0" label={q.name} />
-            <div className="flex-1 font-semibold text-white">{q.name}</div>
-            <div className="text-white/70 tabular-nums">
-              {q.price ? `R$ ${q.price.toFixed(2)}` : "—"}{" "}
-              <span className="text-white/35 text-[10px]">méd.</span>
+            <div className="flex-1 min-w-0">
+              <div className="font-semibold text-white truncate">{q.name}</div>
+              {q.cheapest?.storeName && (
+                <div className="text-[10px] text-white/45 truncate">{q.cheapest.storeName}</div>
+              )}
             </div>
-            <div className="text-[11px] font-semibold tabular-nums w-16 text-right text-white/55">
-              {q.min ? `min R$ ${q.min.toFixed(0)}` : `${q.count} of.`}
+            <div className="text-right">
+              <div className="text-emerald-300 font-bold tabular-nums text-[13px]">
+                {q.min ? `R$ ${q.min.toFixed(2)}` : "—"}
+              </div>
+              <div className="text-[9px] text-white/40 uppercase tracking-wider">
+                {q.count ? `${q.count} of.` : "sem oferta"}
+              </div>
             </div>
           </li>
         ))}
