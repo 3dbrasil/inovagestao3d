@@ -2949,7 +2949,7 @@ Utilize a nossa nova calculadora de formação de preço de produtos para obter 
                     </div>
                     <button
                       type="button"
-                      onClick={() => setManualSuggestedIntoPrice()}
+                      onClick={() => setManualProdPrice(parseFloat(manualSuggestedPrice.toFixed(2)) || 0)}
                       className="px-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[10px] font-bold uppercase hover:bg-emerald-500/25"
                     >
                       Usar
