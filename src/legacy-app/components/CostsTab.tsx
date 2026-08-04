@@ -723,6 +723,7 @@ export const CostsTab: React.FC<CostsTabProps> = ({
     setManualProdWeight(item.weightGrams || 150);
     setManualProdTime(item.printTimeHours || 5.0);
     setManualProdPrice(item.defaultPrice || 50);
+    setManualProdPriceEdited(true);
     setManualProdStock(item.stockCount || 0);
     setManualProdMinStock(item.minStockCount || 0);
     setManualProdImage(item.imageUrl || '');
@@ -748,6 +749,7 @@ export const CostsTab: React.FC<CostsTabProps> = ({
     setManualProdWeight(150);
     setManualProdTime(5.0);
     setManualProdPrice(50);
+    setManualProdPriceEdited(false);
     setManualProdStock(4);
     setManualProdMinStock(1);
     setManualProdImage('');
@@ -857,6 +859,7 @@ export const CostsTab: React.FC<CostsTabProps> = ({
   const [manualProdWeight, setManualProdWeight] = useState(150);
   const [manualProdTime, setManualProdTime] = useState(5.0);
   const [manualProdPrice, setManualProdPrice] = useState<number | string>(50);
+  const [manualProdPriceEdited, setManualProdPriceEdited] = useState(false);
   const [manualProdStock, setManualProdStock] = useState(4);
   const [manualProdMinStock, setManualProdMinStock] = useState(1);
   const [manualProdImage, setManualProdImage] = useState('');
@@ -892,6 +895,7 @@ export const CostsTab: React.FC<CostsTabProps> = ({
     setManualProdWeight(150);
     setManualProdTime(5.0);
     setManualProdPrice(50);
+    setManualProdPriceEdited(false);
     setManualProdStock(4);
     setManualProdMinStock(1);
     setManualProdImage('');
@@ -1692,7 +1696,13 @@ export const CostsTab: React.FC<CostsTabProps> = ({
       const st = filamentStocks.find((x: any) => x.id === f.filamentStockId);
       const perGram = st ? (Number(st.priceRoll) || 0) / 1000 : 0;
       return sum + (Number(f.weightGrams) || 0) * perGram;
-    }, 0) || ((Number(manualProdWeight) || 0) / 1000) * (Number(rawFilamentPriceKg) || 0);
+    }, 0) || (() => {
+      const matching = filamentStocks.filter((stock: any) => stock.type === manualProdMaterial && Number(stock.priceRoll) > 0);
+      const priceKg = matching.length
+        ? matching.reduce((sum: number, stock: any) => sum + Number(stock.priceRoll), 0) / matching.length
+        : 120;
+      return ((Number(manualProdWeight) || 0) / 1000) * priceKg;
+    })();
     const supCost = manualProdSupplies.reduce((sum, s) => {
       const st = (suppliesStocks || []).find((x: any) => x.id === s.supplyStockId);
       return sum + (Number(s.quantity) || 0) * (st ? Number(st.unitCost) || 0 : 0);
@@ -1711,6 +1721,11 @@ export const CostsTab: React.FC<CostsTabProps> = ({
     const price = base / (1 - deduction);
     return Number.isFinite(price) && price > 0 ? price : 0;
   })();
+
+  useEffect(() => {
+    if (!showAddProductManualForm || manualProdPriceEdited) return;
+    setManualProdPrice(Number(manualSuggestedPrice.toFixed(2)));
+  }, [showAddProductManualForm, manualProdPriceEdited, manualSuggestedPrice]);
 
   const handleSaveToCatalog = () => {
     if (!calcProdName.trim()) {
@@ -2903,7 +2918,7 @@ Utilize a nossa nova calculadora de formação de preço de produtos para obter 
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 <div className="space-y-1">
                   <label className="block text-[10px] text-[#8BA58D] uppercase font-bold">Material Utilizado</label>
                   <select
@@ -2941,38 +2956,38 @@ Utilize a nossa nova calculadora de formação de preço de produtos para obter 
                   />
                 </div>
 
-                <div className="space-y-1">
-                  <label className="block text-[10px] text-[#8BA58D] uppercase font-bold font-mono">Preço Sugerido (calculado)</label>
-                  <div className="flex gap-1.5">
-                    <div className="flex-1 bg-[#0C0E0D] border border-emerald-500/30 rounded-xl px-3 py-2 text-xs text-emerald-300 font-mono font-bold">
-                      R$ {manualSuggestedPrice.toFixed(2)}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setManualProdPrice(parseFloat(manualSuggestedPrice.toFixed(2)) || 0)}
-                      className="px-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[10px] font-bold uppercase hover:bg-emerald-500/25"
-                    >
-                      Usar
-                    </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 rounded-2xl border border-emerald-500/25 bg-emerald-500/5 p-4">
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] text-emerald-300 uppercase font-black">Preço Final Sugerido pela Calculadora</label>
+                  <div className="h-12 flex items-center justify-between gap-3 rounded-xl border border-emerald-500/35 bg-[#0C0E0D] px-4">
+                    <strong className="text-xl text-emerald-300 font-mono">R$ {manualSuggestedPrice.toFixed(2)}</strong>
+                    <span className="text-[9px] text-[#8BA58D] uppercase">automático</span>
                   </div>
                 </div>
-
-                <div className="space-y-1">
-                  <label className="block text-[10px] text-[#8BA58D] uppercase font-bold font-mono">Preço Real de Venda (R$)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    required
-                    placeholder={manualSuggestedPrice.toFixed(2)}
-                    value={manualProdPrice}
-                    onChange={(e) => setManualProdPrice(e.target.value)}
-                    onBlur={(e) => {
-                      const v = parseFloat(e.target.value);
-                      setManualProdPrice(Number.isFinite(v) && v > 0 ? v : parseFloat(manualSuggestedPrice.toFixed(2)) || 0);
-                    }}
-                    className="w-full bg-[#0C0E0D] border border-[#232B27] rounded-xl px-3 py-2 text-xs text-white font-mono"
-                  />
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] text-white uppercase font-black">Preço Real que Você Vai Cobrar</label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-white/50">R$</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      required
+                      aria-label="Preço real de venda"
+                      value={manualProdPrice}
+                      onChange={(e) => {
+                        setManualProdPriceEdited(true);
+                        setManualProdPrice(e.target.value);
+                      }}
+                      onBlur={(e) => {
+                        const value = parseFloat(e.target.value);
+                        setManualProdPrice(Number.isFinite(value) && value >= 0 ? value : Number(manualSuggestedPrice.toFixed(2)));
+                      }}
+                      className="h-12 w-full rounded-xl border border-[#b7ff00]/45 bg-[#0C0E0D] pl-11 pr-3 text-xl font-black text-white outline-none font-mono focus:border-[#b7ff00]"
+                    />
+                  </div>
                 </div>
               </div>
 
