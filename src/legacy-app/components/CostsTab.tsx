@@ -2942,14 +2942,35 @@ Utilize a nossa nova calculadora de formação de preço de produtos para obter 
                 </div>
 
                 <div className="space-y-1">
-                  <label className="block text-[10px] text-[#8BA58D] uppercase font-bold font-mono">Preço de Venda Final (R$)</label>
+                  <label className="block text-[10px] text-[#8BA58D] uppercase font-bold font-mono">Preço Sugerido (calculado)</label>
+                  <div className="flex gap-1.5">
+                    <div className="flex-1 bg-[#0C0E0D] border border-emerald-500/30 rounded-xl px-3 py-2 text-xs text-emerald-300 font-mono font-bold">
+                      R$ {manualSuggestedPrice.toFixed(2)}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setManualSuggestedIntoPrice()}
+                      className="px-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[10px] font-bold uppercase hover:bg-emerald-500/25"
+                    >
+                      Usar
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-[10px] text-[#8BA58D] uppercase font-bold font-mono">Preço Real de Venda (R$)</label>
                   <input
                     type="number"
-                    min="1"
+                    min="0"
                     step="0.01"
                     required
+                    placeholder={manualSuggestedPrice.toFixed(2)}
                     value={manualProdPrice}
-                    onChange={(e) => setManualProdPrice(Math.max(1, parseFloat(e.target.value) || 1))}
+                    onChange={(e) => setManualProdPrice(e.target.value)}
+                    onBlur={(e) => {
+                      const v = parseFloat(e.target.value);
+                      setManualProdPrice(Number.isFinite(v) && v > 0 ? v : parseFloat(manualSuggestedPrice.toFixed(2)) || 0);
+                    }}
                     className="w-full bg-[#0C0E0D] border border-[#232B27] rounded-xl px-3 py-2 text-xs text-white font-mono"
                   />
                 </div>
