@@ -856,7 +856,7 @@ export const CostsTab: React.FC<CostsTabProps> = ({
   const [manualProdColor, setManualProdColor] = useState('Multicor');
   const [manualProdWeight, setManualProdWeight] = useState(150);
   const [manualProdTime, setManualProdTime] = useState(5.0);
-  const [manualProdPrice, setManualProdPrice] = useState(50);
+  const [manualProdPrice, setManualProdPrice] = useState<number | string>(50);
   const [manualProdStock, setManualProdStock] = useState(4);
   const [manualProdMinStock, setManualProdMinStock] = useState(1);
   const [manualProdImage, setManualProdImage] = useState('');
@@ -1685,6 +1685,32 @@ export const CostsTab: React.FC<CostsTabProps> = ({
   const commissionPaidToMarketplace = (finalPriceSuggested * safePercentRate) + calcFixedFee;
   const taxesPaid = finalPriceSuggested * taxOnSaleRate;
   const netEarningsProfit = finalPriceSuggested - commissionPaidToMarketplace - taxesPaid - directMachineCost;
+
+  // ---- Preço sugerido para o formulário manual de produto ----
+  const manualSuggestedPrice = (() => {
+    const matCost = manualProdFilaments.reduce((sum, f) => {
+      const st = filamentStocks.find((x: any) => x.id === f.filamentStockId);
+      const perGram = st ? (Number(st.priceRoll) || 0) / 1000 : 0;
+      return sum + (Number(f.weightGrams) || 0) * perGram;
+    }, 0) || ((Number(manualProdWeight) || 0) / 1000) * (Number(rawFilamentPriceKg) || 0);
+    const supCost = manualProdSupplies.reduce((sum, s) => {
+      const st = (suppliesStocks || []).find((x: any) => x.id === s.supplyStockId);
+      return sum + (Number(s.quantity) || 0) * (st ? Number(st.unitCost) || 0 : 0);
+    }, 0);
+    const hours = Number(manualProdTime) || 0;
+    const energy = ((Number(calcPrinterW) || 0) / 1000) * hours * (Number(calcEnergyKwh) || 0);
+    const labor = (Number(calcLaborHour) || 0) * hours;
+    const direct = matCost + supCost + energy + labor
+      + (Number(calcPackagingCost) || 0) + (Number(calcShippingCost) || 0) + (Number(calcHardwareCost) || 0);
+    const mktAvgPct = ((Number(calcMktShopee) || 0) + (Number(calcMktML) || 0) + (Number(calcMktAmazon) || 0) + (Number(calcMktTikTok) || 0)) / 4;
+    const taxRatePct = calcTaxRegime === 'SIMPLES'
+      ? (Number(calcTaxPct) || 0)
+      : calcTaxRegime === 'NENHUM' ? 0 : 0;
+    const deduction = Math.min(0.95, (mktAvgPct + taxRatePct) / 100);
+    const base = direct * (1 + (Number(calcMargin) || 0) / 100) + (Number(calcFixedFee) || 0);
+    const price = base / (1 - deduction);
+    return Number.isFinite(price) && price > 0 ? price : 0;
+  })();
 
   const handleSaveToCatalog = () => {
     if (!calcProdName.trim()) {
