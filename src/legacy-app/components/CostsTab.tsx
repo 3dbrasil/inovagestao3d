@@ -723,6 +723,7 @@ export const CostsTab: React.FC<CostsTabProps> = ({
     setManualProdWeight(item.weightGrams || 150);
     setManualProdTime(item.printTimeHours || 5.0);
     setManualProdPrice(item.defaultPrice || 50);
+    setManualProdPriceEdited(true);
     setManualProdStock(item.stockCount || 0);
     setManualProdMinStock(item.minStockCount || 0);
     setManualProdImage(item.imageUrl || '');
@@ -748,6 +749,7 @@ export const CostsTab: React.FC<CostsTabProps> = ({
     setManualProdWeight(150);
     setManualProdTime(5.0);
     setManualProdPrice(50);
+    setManualProdPriceEdited(false);
     setManualProdStock(4);
     setManualProdMinStock(1);
     setManualProdImage('');
@@ -893,6 +895,7 @@ export const CostsTab: React.FC<CostsTabProps> = ({
     setManualProdWeight(150);
     setManualProdTime(5.0);
     setManualProdPrice(50);
+    setManualProdPriceEdited(false);
     setManualProdStock(4);
     setManualProdMinStock(1);
     setManualProdImage('');
