@@ -3503,12 +3503,32 @@ Utilize a nossa nova calculadora de formação de preço de produtos para obter 
                             ))}
                           </div>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-end">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
                           <div>
-                            <div className="text-[10px] uppercase tracking-wider font-bold text-[#8BA58D] mb-1">Preço de venda</div>
-                            <div className="px-3 py-2 rounded-lg bg-black/30 border border-[#232B27] text-white text-sm font-bold">
-                              R$ {price.toFixed(2)}
+                            <div className="text-[10px] uppercase tracking-wider font-bold text-emerald-400 mb-1">Preço sugerido</div>
+                            <div className="flex gap-1.5">
+                              <div className="flex-1 px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-sm font-bold font-mono">
+                                R$ {manualSuggestedPrice.toFixed(2)}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setManualProdPrice(parseFloat(manualSuggestedPrice.toFixed(2)) || 0)}
+                                className="px-2.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[10px] font-bold uppercase hover:bg-emerald-500/25"
+                              >
+                                Usar
+                              </button>
                             </div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] uppercase tracking-wider font-bold text-[#b7ff00] mb-1">Preço de venda (editável)</div>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={manualProdPrice}
+                              onChange={(e) => setManualProdPrice(parseFloat(e.target.value) || 0)}
+                              className="w-full px-3 py-2 rounded-lg bg-black/40 border border-[#b7ff00]/40 text-white text-sm font-bold focus:border-[#b7ff00] outline-none"
+                            />
                           </div>
                           <div>
                             <div className="text-[10px] uppercase tracking-wider font-bold text-[#8BA58D] mb-1">Lucro por unidade</div>
