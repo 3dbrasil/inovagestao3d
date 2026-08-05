@@ -1022,6 +1022,9 @@ export const CostsTab: React.FC<CostsTabProps> = ({
     setManualProdSupplies([]);
     setManualStlFileName('');
     setManualStlFileData('');
+    // Limpa a foto para o próximo cadastro não herdar a imagem do produto anterior
+    setManualProdImage('');
+    setEditingProduct(null);
     setShowAddProductManualForm(false);
   };
 
@@ -1766,6 +1769,8 @@ export const CostsTab: React.FC<CostsTabProps> = ({
     setCatalogItems(prev => [newCatalogP, ...prev]);
     setCalcProdName('');
     setCalcProdCode('');
+    // Limpa a foto para o próximo produto não herdar a imagem deste
+    setCalcProdImage('');
     setActiveSubTab('STOCK');
     triggerFeedback(`Produto comercial "${newCatalogP.name}" registrado no estoque de produtos! Ele aparecerá no catálogo automaticamente.`);
   };
