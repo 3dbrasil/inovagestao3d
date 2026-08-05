@@ -787,6 +787,8 @@ export const CostsTab: React.FC<CostsTabProps> = ({
   const [calcStockCount, setCalcStockCount] = useState(5);
   const [calcMinStockCount, setCalcMinStockCount] = useState(2);
   const [calcProdImage, setCalcProdImage] = useState('');
+  const [calcSalePrice, setCalcSalePrice] = useState<number | string>('');
+  const [calcSalePriceEdited, setCalcSalePriceEdited] = useState(false);
 
   // Sub-state for extra supplies added to the calculated product
   const [selectedSuppliesForCalc, setSelectedSuppliesForCalc] = useState<{ supplyId: number; qty: number }[]>([]);
@@ -1686,9 +1688,15 @@ export const CostsTab: React.FC<CostsTabProps> = ({
     : 0;
   const combinedDeduction = Math.min(0.95, safePercentRate + taxOnSaleRate);
   const finalPriceSuggested = (baselineDesiredPrice + calcFixedFee) / (1 - combinedDeduction);
-  const commissionPaidToMarketplace = (finalPriceSuggested * safePercentRate) + calcFixedFee;
-  const taxesPaid = finalPriceSuggested * taxOnSaleRate;
-  const netEarningsProfit = finalPriceSuggested - commissionPaidToMarketplace - taxesPaid - directMachineCost;
+  const effectiveSalePrice = Number(calcSalePrice) || finalPriceSuggested;
+  const commissionPaidToMarketplace = (effectiveSalePrice * safePercentRate) + calcFixedFee;
+  const taxesPaid = effectiveSalePrice * taxOnSaleRate;
+  const netEarningsProfit = effectiveSalePrice - commissionPaidToMarketplace - taxesPaid - directMachineCost;
+
+  useEffect(() => {
+    if (calcSalePriceEdited) return;
+    setCalcSalePrice(Number(finalPriceSuggested.toFixed(2)));
+  }, [calcSalePriceEdited, finalPriceSuggested]);
 
   // ---- Preço sugerido para o formulário manual de produto ----
   const manualSuggestedPrice = (() => {
@@ -1747,7 +1755,7 @@ export const CostsTab: React.FC<CostsTabProps> = ({
       printTimeHours: calcTime,
       filamentType: calcMaterial,
       filamentColorsUsed: activeFilament ? activeFilament.color : 'Universal',
-      defaultPrice: parseFloat(finalPriceSuggested.toFixed(2)),
+      defaultPrice: parseFloat(effectiveSalePrice.toFixed(2)),
       stockCount: calcStockCount,
       minStockCount: calcMinStockCount,
       productCode: code,
@@ -2639,15 +2647,47 @@ Utilize a nossa nova calculadora de formação de preço de produtos para obter 
                 </div>
               </div>
 
-              {/* Big price tags box */}
-              <div className="p-4 bg-[#b7ff00]/5 border border-[#b7ff00]/20 rounded-2xl space-y-2 z-10 relative text-center">
-                <span className="text-[9px] uppercase tracking-wider text-[#b7ff00] font-black block">Preço de Venda Final Sugerido</span>
-                <p className="text-3xl font-black text-white font-mono">
-                  R$ {finalPriceSuggested.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </p>
-                <p className="text-[10px] text-[#8BA58D]">
-                  Utilize esta tag nos anúncios reais do e-commerce para garantir sua margem líquida inteira de {calcMargin}% mesmo pagando as tarifas!
-                </p>
+              {/* Suggested and actual sale prices */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 z-10 relative">
+                <div className="p-4 bg-[#b7ff00]/5 border border-[#b7ff00]/20 rounded-2xl text-center">
+                  <span className="text-[9px] uppercase tracking-wider text-[#b7ff00] font-black block">Preço Final Sugerido</span>
+                  <p className="mt-2 text-3xl font-black text-white font-mono">
+                    R$ {finalPriceSuggested.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCalcSalePrice(Number(finalPriceSuggested.toFixed(2)));
+                      setCalcSalePriceEdited(false);
+                    }}
+                    className="mt-3 px-3 py-1.5 rounded-lg border border-[#b7ff00]/30 bg-[#b7ff00]/10 text-[10px] font-black uppercase text-[#b7ff00] hover:bg-[#b7ff00]/20"
+                  >
+                    Usar sugerido
+                  </button>
+                </div>
+                <label className="p-4 bg-white/[0.03] border border-white/10 rounded-2xl text-center">
+                  <span className="text-[9px] uppercase tracking-wider text-[#DCE8E0] font-black block">Preço Real de Venda</span>
+                  <div className="mt-2 flex items-center justify-center gap-2">
+                    <span className="text-xl font-black text-white font-mono">R$</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={calcSalePrice}
+                      onChange={(event) => {
+                        setCalcSalePrice(event.target.value);
+                        setCalcSalePriceEdited(true);
+                      }}
+                      onBlur={() => {
+                        const value = Number(calcSalePrice);
+                        setCalcSalePrice(Number.isFinite(value) && value > 0 ? Number(value.toFixed(2)) : Number(finalPriceSuggested.toFixed(2)));
+                      }}
+                      className="w-32 bg-transparent border-b border-[#b7ff00]/40 text-center text-3xl font-black text-white font-mono outline-none focus:border-[#b7ff00]"
+                      aria-label="Preço real de venda"
+                    />
+                  </div>
+                  <p className="mt-3 text-[10px] text-[#8BA58D]">O lucro líquido acima é recalculado por este valor.</p>
+                </label>
               </div>
 
               {/* Action and Register Button */}
