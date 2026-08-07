@@ -102,7 +102,8 @@ import {
   Printer as PrinterNavIcon,
   FileBarChart2,
   FileEdit,
-  MessageCircle
+  MessageCircle,
+  Store
 } from 'lucide-react';
 
 // STUNNING 3D CUBE & PRINTER EXTENSION GEOMETRIC LOGO
