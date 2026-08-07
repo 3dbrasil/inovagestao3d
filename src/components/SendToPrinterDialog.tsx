@@ -74,7 +74,7 @@ export function SendToPrinterDialog({
         {printers.length === 0 ? (
           <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/70">
             Nenhuma impressora cadastrada.{" "}
-            <Link to="/impressoras" className="text-cyan-300 underline">
+            <Link to="/" className="text-cyan-300 underline">
               Cadastrar agora
             </Link>
           </div>
