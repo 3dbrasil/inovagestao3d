@@ -124,12 +124,6 @@ export const OlistTab: React.FC = () => {
       .slice(0, 300);
   }, [orders, query]);
 
-  const filteredProducts = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return products.slice(0, 300);
-    return products.filter((p) => `${p.sku} ${p.nome}`.toLowerCase().includes(q)).slice(0, 300);
-  }, [products, query]);
-
   const groups = useMemo(() => groupVariations(products), [products]);
 
   const filteredGroups = useMemo(() => {
