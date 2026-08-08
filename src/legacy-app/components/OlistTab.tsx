@@ -5,7 +5,8 @@ import {
 } from 'lucide-react';
 import { olistStatus, olistSync } from '@/lib/olist.functions';
 import { safeStorage } from '../utils/storage';
-import type { CatalogItem } from '../types';
+import { groupVariations } from './olist/grouping';
+import { OlistImportModal } from './olist/OlistImportModal';
 
 const SNAPSHOT_KEY = 'olist_snapshot_v1';
 const CATALOG_KEY = 'bambuzau_local_catalog_production';
@@ -59,6 +60,8 @@ export const OlistTab: React.FC = () => {
   const [msg, setMsg] = useState<string | null>(null);
   const [view, setView] = useState<'PEDIDOS' | 'PRODUTOS' | 'CANAIS'>('PEDIDOS');
   const [query, setQuery] = useState('');
+  const [importOpen, setImportOpen] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
 
   useEffect(() => {
     setSnapshot(readSnapshot());
@@ -128,46 +131,15 @@ export const OlistTab: React.FC = () => {
     return products.filter((p) => `${p.sku} ${p.nome}`.toLowerCase().includes(q)).slice(0, 300);
   }, [products, query]);
 
-  const importToCatalog = () => {
-    try {
-      const raw = safeStorage.getItem(CATALOG_KEY);
-      const current: CatalogItem[] = raw ? JSON.parse(raw) : [];
-      const byCode = new Map(current.map((c) => [String(c.productCode || '').toLowerCase(), c]));
-      let created = 0;
-      let updated = 0;
-      let nextId = current.reduce((m, c) => Math.max(m, Number(c.id) || 0), 0) + 1;
-      for (const p of products) {
-        const code = (p.sku || p.id).toLowerCase();
-        const existing = byCode.get(code);
-        if (existing) {
-          existing.defaultPrice = p.preco || existing.defaultPrice;
-          existing.stockCount = p.saldo || existing.stockCount;
-          updated++;
-        } else {
-          const item = {
-            id: nextId++,
-            name: p.nome || p.sku,
-            description: `Importado da Olist (${p.unidade || 'UN'})`,
-            weightGrams: 0,
-            printTimeHours: 0,
-            filamentType: 'PLA',
-            defaultPrice: p.preco || 0,
-            stockCount: p.saldo || 0,
-            minStockCount: 0,
-            productCode: p.sku || p.id,
-          } as CatalogItem;
-          current.push(item);
-          byCode.set(code, item);
-          created++;
-        }
-      }
-      safeStorage.setItem(CATALOG_KEY, JSON.stringify(current));
-      window.dispatchEvent(new Event('bambuzau_catalog_updated'));
-      setMsg(`Catálogo atualizado: ${created} novos, ${updated} atualizados.`);
-    } catch (e: any) {
-      setError(`Falha ao importar catálogo: ${e?.message || e}`);
-    }
-  };
+  const groups = useMemo(() => groupVariations(products), [products]);
+
+  const filteredGroups = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return groups.slice(0, 300);
+    return groups
+      .filter((g) => `${g.baseSku} ${g.nome}`.toLowerCase().includes(q))
+      .slice(0, 300);
+  }, [groups, query]);
 
   return (
     <div className="space-y-5">
