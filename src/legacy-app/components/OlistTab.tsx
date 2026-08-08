@@ -9,7 +9,6 @@ import { groupVariations } from './olist/grouping';
 import { OlistImportModal } from './olist/OlistImportModal';
 
 const SNAPSHOT_KEY = 'olist_snapshot_v1';
-const CATALOG_KEY = 'bambuzau_local_catalog_production';
 const AUTO_SYNC_MS = 30 * 60 * 1000; // 30 min
 
 type OlistOrder = {
@@ -169,7 +168,7 @@ export const OlistTab: React.FC = () => {
             {loading ? 'Sincronizando…' : 'Sincronizar agora'}
           </button>
           <button
-            onClick={importToCatalog}
+            onClick={() => setImportOpen(true)}
             disabled={!products.length}
             className="flex items-center gap-2 rounded-xl border border-white/15 px-4 py-2 text-xs font-bold text-white transition hover:bg-white/10 disabled:opacity-40"
           >
@@ -198,7 +197,7 @@ export const OlistTab: React.FC = () => {
         <Kpi icon={<ShoppingBag className="h-3.5 w-3.5" />} label="Pedidos" value={String(orders.length)} tone="#b7ff00" />
         <Kpi icon={<TrendingUp className="h-3.5 w-3.5" />} label="Faturamento" value={brl(stats.faturamento)} tone="#22C55E" />
         <Kpi icon={<TrendingUp className="h-3.5 w-3.5" />} label="Ticket médio" value={brl(stats.ticket)} tone="#3B82F6" />
-        <Kpi icon={<Package className="h-3.5 w-3.5" />} label="Produtos" value={String(products.length)} hint={`${stats.semEstoque} sem estoque`} tone="#8B5CF6" />
+        <Kpi icon={<Package className="h-3.5 w-3.5" />} label="Produtos" value={String(groups.length)} hint={`${products.length} variações · ${stats.semEstoque} sem estoque`} tone="#8B5CF6" />
         <Kpi icon={<Package className="h-3.5 w-3.5" />} label="Valor em estoque" value={brl(stats.valorEstoque)} tone="#D4A017" />
       </div>
 
@@ -267,25 +266,45 @@ export const OlistTab: React.FC = () => {
                 <tr>
                   <th className="px-3 py-2.5">SKU</th>
                   <th className="px-3 py-2.5">Produto</th>
+                  <th className="px-3 py-2.5">Variações</th>
                   <th className="px-3 py-2.5 text-right">Custo</th>
                   <th className="px-3 py-2.5 text-right">Preço</th>
                   <th className="px-3 py-2.5 text-right">Saldo</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredProducts.map((p) => (
-                  <tr key={p.id || p.sku} className="border-t border-white/5 hover:bg-white/[0.03]">
-                    <td className="px-3 py-2 font-mono text-white/60">{p.sku || '—'}</td>
-                    <td className="px-3 py-2 text-white/85">{p.nome}</td>
-                    <td className="px-3 py-2 text-right text-white/55">{brl(p.precoCusto)}</td>
-                    <td className="px-3 py-2 text-right font-bold text-white">{brl(p.preco)}</td>
-                    <td className={`px-3 py-2 text-right font-bold ${p.saldo > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {p.saldo}
-                    </td>
-                  </tr>
+                {filteredGroups.map((g) => (
+                  <React.Fragment key={g.key}>
+                    <tr
+                      className="cursor-pointer border-t border-white/5 hover:bg-white/[0.03]"
+                      onClick={() => setExpanded(expanded === g.key ? null : g.key)}
+                    >
+                      <td className="px-3 py-2 font-mono text-white/60">{g.baseSku || '—'}</td>
+                      <td className="px-3 py-2 text-white/85">{g.nome}</td>
+                      <td className="px-3 py-2 text-white/45">
+                        {g.variacoes.length > 1 ? `${g.variacoes.length} variações` : '—'}
+                      </td>
+                      <td className="px-3 py-2 text-right text-white/55">{brl(g.precoCusto)}</td>
+                      <td className="px-3 py-2 text-right font-bold text-white">{brl(g.preco)}</td>
+                      <td className={`px-3 py-2 text-right font-bold ${g.saldo > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {g.saldo}
+                      </td>
+                    </tr>
+                    {expanded === g.key &&
+                      g.variacoes.map((v) => (
+                        <tr key={v.id || v.sku} className="bg-white/[0.02] text-[11px]">
+                          <td className="px-3 py-1.5 pl-6 font-mono text-white/35">{v.sku || '—'}</td>
+                          <td className="px-3 py-1.5 text-white/50">{v.nome}</td>
+                          <td className="px-3 py-1.5 text-white/30">variação</td>
+                          <td className="px-3 py-1.5 text-right text-white/40">{brl(v.precoCusto)}</td>
+                          <td className="px-3 py-1.5 text-right text-white/60">{brl(v.preco)}</td>
+                          <td className="px-3 py-1.5 text-right text-white/50">{v.saldo}</td>
+                        </tr>
+                      ))}
+                  </React.Fragment>
                 ))}
-                {!filteredProducts.length && (
-                  <tr><td colSpan={5} className="px-3 py-8 text-center text-white/35">Nenhum produto carregado.</td></tr>
+                {!filteredGroups.length && (
+                  <tr><td colSpan={6} className="px-3 py-8 text-center text-white/35">Nenhum produto carregado.</td></tr>
                 )}
               </tbody>
             </table>
@@ -309,6 +328,14 @@ export const OlistTab: React.FC = () => {
           </div>
         )}
       </div>
+
+      {importOpen && (
+        <OlistImportModal
+          groups={filteredGroups}
+          onClose={() => setImportOpen(false)}
+          onDone={(m) => setMsg(m)}
+        />
+      )}
     </div>
   );
 };
