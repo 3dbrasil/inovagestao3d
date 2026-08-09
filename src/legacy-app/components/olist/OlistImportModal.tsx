@@ -23,6 +23,7 @@ export type ImportDraft = {
   minStockCount: number;
   defaultPrice: number;
   stockCount: number;
+  virtualStockCount: number;
 };
 
 const readJson = <T,>(key: string): T[] => {
@@ -71,7 +72,9 @@ export const OlistImportModal: React.FC<{
           extraCostPerUnit: prev?.extraCostPerUnit || 0,
           minStockCount: prev?.minStockCount || 0,
           defaultPrice: g.preco || prev?.defaultPrice || 0,
-          stockCount: g.saldo,
+          // Estoque REAL = o que já existe no Gestão 3D (Olist é só o anunciado)
+          stockCount: prev?.stockCount ?? 0,
+          virtualStockCount: g.saldo || prev?.virtualStockCount || 0,
         };
       }),
     );
@@ -103,6 +106,7 @@ export const OlistImportModal: React.FC<{
         filamentColorsUsed: d.filamentColorsUsed,
         defaultPrice: d.defaultPrice,
         stockCount: d.stockCount,
+        virtualStockCount: d.virtualStockCount,
         minStockCount: d.minStockCount,
         extraCostPerUnit: d.extraCostPerUnit,
         suppliesUsed: d.supplyStockId
