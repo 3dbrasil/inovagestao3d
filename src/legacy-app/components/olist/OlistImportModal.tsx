@@ -164,6 +164,25 @@ export const OlistImportModal: React.FC<{
           <span className="ml-auto">{selectedCount} de {drafts.length} produtos</span>
         </div>
 
+        <div className="flex flex-wrap items-center gap-2 border-b border-white/10 px-4 py-2 text-[11px] text-white/45">
+          <span>Estoque virtual (anunciado):</span>
+          {[5, 10, 20].map((n) => (
+            <button
+              key={n}
+              onClick={() => setDrafts((d) => d.map((x) => (x.selected ? { ...x, virtualStockCount: (x.stockCount || 0) + n } : x)))}
+              className="rounded-lg border border-sky-400/30 px-2 py-1 font-bold text-sky-300 hover:bg-sky-400/10"
+            >
+              real +{n}
+            </button>
+          ))}
+          <button
+            onClick={() => setDrafts((d) => d.map((x) => (x.selected ? { ...x, virtualStockCount: x.stockCount } : x)))}
+            className="rounded-lg border border-white/10 px-2 py-1 font-bold text-white/70 hover:bg-white/10"
+          >
+            igualar ao real
+          </button>
+        </div>
+
         <div className="flex-1 overflow-auto p-3">
           <div className="space-y-2">
             {drafts.map((d) => {
