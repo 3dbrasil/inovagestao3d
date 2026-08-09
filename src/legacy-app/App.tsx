@@ -23,6 +23,7 @@ import { ManutencaoTab } from './components/ManutencaoTab';
 import { OrcamentosTab } from './components/OrcamentosTab';
 import { WhatsAppTab } from './components/WhatsAppTab';
 import { OlistTab } from './components/OlistTab';
+import { CriarProdutoTab } from './components/olist/CriarProdutoTab';
 import {
   PriceResearchTab, PreCheckTab, AgendaTab, ToolsTab, ModelsTab
 } from './components/NewTabs';
@@ -1752,6 +1753,7 @@ export default function App() {
                 { id: 13, label: 'Agenda', icon: Calendar },
                 { id: 20, label: 'WhatsApp', icon: MessageCircle },
                 { id: 21, label: 'Olist', icon: Store },
+                { id: 22, label: 'Criar Produto IA', icon: Sparkles },
                 { id: 5, label: 'Ajustes', icon: Settings },
               ],
             },
@@ -2236,6 +2238,7 @@ export default function App() {
             )}
             {currentTab === 20 && <WhatsAppTab />}
             {currentTab === 21 && <OlistTab />}
+            {currentTab === 22 && <CriarProdutoTab />}
           </Suspense>
         )}
           </div>
