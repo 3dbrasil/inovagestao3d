@@ -84,6 +84,8 @@ export interface CatalogItem {
   stockCount: number;
   minStockCount: number;
   productCode: string;
+  /** Estoque anunciado nos marketplaces (Olist). Normalmente maior que o real. */
+  virtualStockCount?: number;
   filamentColorsUsed?: string;
   spentPartId?: number | null;
   spentPartQty?: number;

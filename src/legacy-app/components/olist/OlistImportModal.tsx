@@ -23,6 +23,7 @@ export type ImportDraft = {
   minStockCount: number;
   defaultPrice: number;
   stockCount: number;
+  virtualStockCount: number;
 };
 
 const readJson = <T,>(key: string): T[] => {
@@ -71,7 +72,9 @@ export const OlistImportModal: React.FC<{
           extraCostPerUnit: prev?.extraCostPerUnit || 0,
           minStockCount: prev?.minStockCount || 0,
           defaultPrice: g.preco || prev?.defaultPrice || 0,
-          stockCount: g.saldo,
+          // Estoque REAL = o que já existe no Gestão 3D (Olist é só o anunciado)
+          stockCount: prev?.stockCount ?? 0,
+          virtualStockCount: g.saldo || prev?.virtualStockCount || 0,
         };
       }),
     );
@@ -103,6 +106,7 @@ export const OlistImportModal: React.FC<{
         filamentColorsUsed: d.filamentColorsUsed,
         defaultPrice: d.defaultPrice,
         stockCount: d.stockCount,
+        virtualStockCount: d.virtualStockCount,
         minStockCount: d.minStockCount,
         extraCostPerUnit: d.extraCostPerUnit,
         suppliesUsed: d.supplyStockId
@@ -160,6 +164,25 @@ export const OlistImportModal: React.FC<{
           <span className="ml-auto">{selectedCount} de {drafts.length} produtos</span>
         </div>
 
+        <div className="flex flex-wrap items-center gap-2 border-b border-white/10 px-4 py-2 text-[11px] text-white/45">
+          <span>Estoque virtual (anunciado):</span>
+          {[5, 10, 20].map((n) => (
+            <button
+              key={n}
+              onClick={() => setDrafts((d) => d.map((x) => (x.selected ? { ...x, virtualStockCount: (x.stockCount || 0) + n } : x)))}
+              className="rounded-lg border border-sky-400/30 px-2 py-1 font-bold text-sky-300 hover:bg-sky-400/10"
+            >
+              real +{n}
+            </button>
+          ))}
+          <button
+            onClick={() => setDrafts((d) => d.map((x) => (x.selected ? { ...x, virtualStockCount: x.stockCount } : x)))}
+            className="rounded-lg border border-white/10 px-2 py-1 font-bold text-white/70 hover:bg-white/10"
+          >
+            igualar ao real
+          </button>
+        </div>
+
         <div className="flex-1 overflow-auto p-3">
           <div className="space-y-2">
             {drafts.map((d) => {
@@ -182,6 +205,7 @@ export const OlistImportModal: React.FC<{
                           <Layers className="h-3 w-3" /> {g.variacoes.length} variação(ões)
                         </span>
                         <span>estoque {d.stockCount}</span>
+                        <span className="text-sky-300/70">anunciado {d.virtualStockCount}</span>
                       </div>
                     </div>
                     <button
@@ -251,8 +275,17 @@ export const OlistImportModal: React.FC<{
                           <input className={inputCls} inputMode="decimal" value={d.extraCostPerUnit} onChange={(e) => patch(d.key, { extraCostPerUnit: num(e.target.value) })} />
                         </label>
                         <label className="text-[10px] uppercase tracking-wide text-white/40">
-                          Estoque atual
+                          Estoque real (Gestão 3D)
                           <input className={inputCls} inputMode="numeric" value={d.stockCount} onChange={(e) => patch(d.key, { stockCount: num(e.target.value) })} />
+                        </label>
+                        <label className="text-[10px] uppercase tracking-wide text-sky-300/60">
+                          Estoque virtual (anunciado)
+                          <input
+                            className={inputCls}
+                            inputMode="numeric"
+                            value={d.virtualStockCount}
+                            onChange={(e) => patch(d.key, { virtualStockCount: num(e.target.value) })}
+                          />
                         </label>
                         <label className="text-[10px] uppercase tracking-wide text-white/40">
                           Estoque mínimo
