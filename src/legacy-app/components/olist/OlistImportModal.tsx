@@ -186,6 +186,7 @@ export const OlistImportModal: React.FC<{
                           <Layers className="h-3 w-3" /> {g.variacoes.length} variação(ões)
                         </span>
                         <span>estoque {d.stockCount}</span>
+                        <span className="text-sky-300/70">anunciado {d.virtualStockCount}</span>
                       </div>
                     </div>
                     <button
@@ -255,8 +256,17 @@ export const OlistImportModal: React.FC<{
                           <input className={inputCls} inputMode="decimal" value={d.extraCostPerUnit} onChange={(e) => patch(d.key, { extraCostPerUnit: num(e.target.value) })} />
                         </label>
                         <label className="text-[10px] uppercase tracking-wide text-white/40">
-                          Estoque atual
+                          Estoque real (Gestão 3D)
                           <input className={inputCls} inputMode="numeric" value={d.stockCount} onChange={(e) => patch(d.key, { stockCount: num(e.target.value) })} />
+                        </label>
+                        <label className="text-[10px] uppercase tracking-wide text-sky-300/60">
+                          Estoque virtual (anunciado)
+                          <input
+                            className={inputCls}
+                            inputMode="numeric"
+                            value={d.virtualStockCount}
+                            onChange={(e) => patch(d.key, { virtualStockCount: num(e.target.value) })}
+                          />
                         </label>
                         <label className="text-[10px] uppercase tracking-wide text-white/40">
                           Estoque mínimo
