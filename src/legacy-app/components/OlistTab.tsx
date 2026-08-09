@@ -263,7 +263,7 @@ export const OlistTab: React.FC = () => {
                   <th className="px-3 py-2.5">Variações</th>
                   <th className="px-3 py-2.5 text-right">Custo</th>
                   <th className="px-3 py-2.5 text-right">Preço</th>
-                  <th className="px-3 py-2.5 text-right">Saldo</th>
+                  <th className="px-3 py-2.5 text-right">Estoque anunciado</th>
                 </tr>
               </thead>
               <tbody>
