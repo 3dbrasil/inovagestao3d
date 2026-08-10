@@ -117,6 +117,186 @@ function readAllLocalStorage(): StorageDump {
   return storageDump;
 }
 
+function readAllSessionStorage(): StorageDump {
+  const dump: StorageDump = {};
+  try {
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const key = sessionStorage.key(i);
+      if (!key) continue;
+      const value = sessionStorage.getItem(key);
+      if (value !== null) dump[key] = value;
+    }
+  } catch {
+    /* sessão pode não existir (SSR) */
+  }
+  return dump;
+}
+
+/* ------------------------------------------------------------------ *
+ * Backup genérico de TODOS os bancos IndexedDB
+ * ------------------------------------------------------------------ */
+
+// Bancos que guardam apenas handles nativos (não serializáveis) e caches
+const SKIP_IDB_DATABASES = new Set(["lov-backup-handle"]);
+
+async function encodeIdbValue(value: any): Promise<any> {
+  if (value == null) return value;
+  if (typeof Blob !== "undefined" && value instanceof Blob) {
+    return { __type: "blob", mimeType: value.type || "application/octet-stream", size: value.size, dataBase64: arrayBufferToBase64(await value.arrayBuffer()) };
+  }
+  if (value instanceof ArrayBuffer) {
+    return { __type: "arraybuffer", dataBase64: arrayBufferToBase64(value) };
+  }
+  if (ArrayBuffer.isView(value)) {
+    const view = value as ArrayBufferView;
+    return { __type: "arraybuffer", dataBase64: arrayBufferToBase64(view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength)) };
+  }
+  if (value instanceof Date) return { __type: "date", iso: value.toISOString() };
+  if (Array.isArray(value)) return Promise.all(value.map(encodeIdbValue));
+  if (typeof value === "object") {
+    const out: Record<string, any> = {};
+    for (const [k, v] of Object.entries(value)) out[k] = await encodeIdbValue(v);
+    return out;
+  }
+  return value;
+}
+
+function decodeIdbValue(value: any): any {
+  if (value == null || typeof value !== "object") return value;
+  if (Array.isArray(value)) return value.map(decodeIdbValue);
+  if (value.__type === "blob") return base64ToBlob(value.dataBase64 || "", value.mimeType);
+  if (value.__type === "arraybuffer") return base64ToBlob(value.dataBase64 || "", "application/octet-stream");
+  if (value.__type === "date") return new Date(value.iso);
+  const out: Record<string, any> = {};
+  for (const [k, v] of Object.entries(value)) out[k] = decodeIdbValue(v);
+  return out;
+}
+
+function openRawDb(name: string, version?: number, upgrade?: (db: IDBDatabase) => void): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = version ? indexedDB.open(name, version) : indexedDB.open(name);
+    if (upgrade) req.onupgradeneeded = () => upgrade(req.result);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+    req.onblocked = () => reject(new Error(`IndexedDB bloqueado: ${name}`));
+  });
+}
+
+function reqToPromise<T>(request: IDBRequest<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function dumpAllIndexedDb(): Promise<IdbDatabaseDump[]> {
+  const out: IdbDatabaseDump[] = [];
+  try {
+    if (typeof indexedDB === "undefined" || typeof (indexedDB as any).databases !== "function") return out;
+    const list = (await (indexedDB as any).databases()) as Array<{ name?: string; version?: number }>;
+    for (const info of list) {
+      const name = info?.name;
+      if (!name || SKIP_IDB_DATABASES.has(name)) continue;
+      try {
+        const db = await openRawDb(name);
+        const storeNames = Array.from(db.objectStoreNames);
+        const stores: IdbStoreDump[] = [];
+        if (storeNames.length) {
+          const tx = db.transaction(storeNames, "readonly");
+          for (const storeName of storeNames) {
+            const store = tx.objectStore(storeName);
+            const keys = await reqToPromise(store.getAllKeys());
+            const values = await reqToPromise(store.getAll());
+            const records: IdbStoreDump["records"] = [];
+            for (let i = 0; i < values.length; i++) {
+              records.push({
+                key: store.keyPath ? undefined : (keys[i] as unknown),
+                value: await encodeIdbValue(values[i]),
+              });
+            }
+            stores.push({
+              name: storeName,
+              keyPath: (store.keyPath as string | string[] | null) ?? null,
+              autoIncrement: store.autoIncrement,
+              indexes: Array.from(store.indexNames).map((idxName) => {
+                const idx = store.index(idxName);
+                return { name: idxName, keyPath: idx.keyPath as string | string[], unique: idx.unique, multiEntry: idx.multiEntry };
+              }),
+              records,
+            });
+          }
+        }
+        out.push({ name, version: db.version, stores });
+        db.close();
+      } catch (error) {
+        console.warn("Falha ao incluir banco IndexedDB no backup:", name, error);
+      }
+    }
+  } catch (error) {
+    console.warn("Falha ao listar bancos IndexedDB:", error);
+  }
+  return out;
+}
+
+async function restoreIndexedDbDump(dumps: IdbDatabaseDump[]): Promise<{ databases: number; records: number }> {
+  let databases = 0;
+  let records = 0;
+  for (const dump of dumps) {
+    if (!dump?.name || SKIP_IDB_DATABASES.has(dump.name)) continue;
+    try {
+      await new Promise<void>((resolve) => {
+        const req = indexedDB.deleteDatabase(dump.name);
+        req.onsuccess = () => resolve();
+        req.onerror = () => resolve();
+        req.onblocked = () => resolve();
+      });
+      const db = await openRawDb(dump.name, Math.max(1, dump.version || 1), (raw) => {
+        for (const store of dump.stores) {
+          const objectStore = raw.objectStoreNames.contains(store.name)
+            ? raw.transaction!.objectStore(store.name)
+            : raw.createObjectStore(store.name, {
+                keyPath: (store.keyPath as any) ?? undefined,
+                autoIncrement: Boolean(store.autoIncrement),
+              });
+          for (const idx of store.indexes || []) {
+            if (!objectStore.indexNames.contains(idx.name)) {
+              objectStore.createIndex(idx.name, idx.keyPath as any, { unique: idx.unique, multiEntry: idx.multiEntry });
+            }
+          }
+        }
+      });
+      const storeNames = dump.stores.map((s) => s.name).filter((n) => db.objectStoreNames.contains(n));
+      if (storeNames.length) {
+        const tx = db.transaction(storeNames, "readwrite");
+        for (const store of dump.stores) {
+          if (!db.objectStoreNames.contains(store.name)) continue;
+          const objectStore = tx.objectStore(store.name);
+          for (const record of store.records || []) {
+            try {
+              const value = decodeIdbValue(record.value);
+              if (store.keyPath) objectStore.put(value);
+              else objectStore.put(value, record.key as IDBValidKey);
+              records += 1;
+            } catch (error) {
+              console.warn("Falha ao restaurar registro IndexedDB:", dump.name, store.name, error);
+            }
+          }
+        }
+        await new Promise<void>((resolve) => {
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => resolve();
+          tx.onabort = () => resolve();
+        });
+      }
+      db.close();
+      databases += 1;
+    } catch (error) {
+      console.warn("Falha ao restaurar banco IndexedDB:", dump.name, error);
+    }
+  }
+  return { databases, records };
+}
+
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
   const chunkSize = 0x8000;
