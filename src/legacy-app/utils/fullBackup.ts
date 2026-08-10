@@ -382,6 +382,7 @@ async function blobToCatalogFile(model: ModelRecord, blob: Blob): Promise<Catalo
 
 export async function createCompleteBackup(extraData: Record<string, unknown> = {}): Promise<CompleteBackup> {
   const storage = readAllLocalStorage();
+  const session = readAllSessionStorage();
   const { listModels, getFile } = await import("@/lib/catalog-db");
   const models = await listModels();
   const files: CatalogFileBackup[] = [];
@@ -409,6 +410,12 @@ export async function createCompleteBackup(extraData: Record<string, unknown> = 
     missingFileModelIds,
   };
 
+  const indexedDbVault = await dumpAllIndexedDb();
+  const indexedDbRecords = indexedDbVault.reduce(
+    (total, db) => total + db.stores.reduce((sum, store) => sum + (store.records?.length || 0), 0),
+    0,
+  );
+
   const backup: CompleteBackup = {
     app_signature: GESTAO3D_BACKUP_SIGNATURE,
     version: GESTAO3D_BACKUP_VERSION,
@@ -418,7 +425,9 @@ export async function createCompleteBackup(extraData: Record<string, unknown> = 
     ...extraData,
     storage,
     localStorage: storage,
+    sessionStorage: session,
     catalogVault,
+    indexedDbVault,
     catalog: {
       models,
       filesIncluded: files.length,
@@ -426,9 +435,12 @@ export async function createCompleteBackup(extraData: Record<string, unknown> = 
     },
     integrity: {
       localStorageKeys: Object.keys(storage).length,
+      sessionStorageKeys: Object.keys(session).length,
       catalogModels: models.length,
       catalogFiles: files.length,
       missingCatalogFiles: missingFileModelIds.length,
+      indexedDbDatabases: indexedDbVault.length,
+      indexedDbRecords,
     },
   } as CompleteBackup;
   const checksum = await computeBackupChecksum(backup);
@@ -520,12 +532,30 @@ export async function restoreCompleteBackup(json: any): Promise<RestoreSummary> 
   const storageDump = fullDump || legacyDump || {};
   const storageKeys = restoreLocalStorageFromDump(storageDump, Boolean(fullDump));
 
+  let sessionKeys = 0;
+  if (json?.sessionStorage && typeof json.sessionStorage === "object") {
+    for (const [key, value] of Object.entries(json.sessionStorage as StorageDump)) {
+      try { sessionStorage.setItem(key, String(value)); sessionKeys += 1; } catch {}
+    }
+  }
+
+  // Restaura TODOS os bancos IndexedDB do backup (catálogo, STLs, calibrações, etc.)
+  let databases = 0;
+  let databaseRecords = 0;
+  const idbDumps: IdbDatabaseDump[] = Array.isArray(json?.indexedDbVault) ? json.indexedDbVault : [];
+  if (idbDumps.length) {
+    const r = await restoreIndexedDbDump(idbDumps);
+    databases = r.databases;
+    databaseRecords = r.records;
+  }
+
   const catalogSource = readCatalogSource(json);
   let catalogModels = 0;
   let catalogFiles = 0;
   let missingCatalogFiles = 0;
 
-  if (catalogSource) {
+  const catalogAlreadyRestored = idbDumps.some((d) => d?.name === "imprimetrics-catalog");
+  if (catalogSource && !catalogAlreadyRestored) {
     const { listModels, deleteModel, saveModel } = await import("@/lib/catalog-db");
     const existing = await listModels().catch(() => [] as ModelRecord[]);
     for (const model of existing) {
@@ -549,10 +579,13 @@ export async function restoreCompleteBackup(json: any): Promise<RestoreSummary> 
 
   return {
     storageKeys,
+    sessionKeys,
     catalogModels,
     catalogFiles,
     missingCatalogFiles,
     hasCatalogBackup: Boolean(catalogSource),
+    databases,
+    databaseRecords,
   };
 }
 
