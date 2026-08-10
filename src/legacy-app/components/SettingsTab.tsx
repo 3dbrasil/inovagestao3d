@@ -532,7 +532,12 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
       const vaultMsg = summary.hasCatalogBackup
         ? ` Vault STL/3MF: ${summary.catalogFiles}/${summary.catalogModels} arquivo(s) restaurado(s).`
         : ' Este backup antigo não contém arquivos STL/3MF do Vault.';
-      showSuccess(`Backup restaurado 100% do que o arquivo contém: ${summary.storageKeys} chaves locais aplicadas.${vaultMsg} Recarregando…`);
+      const dbMsg = summary.databases
+        ? ` Bancos internos: ${summary.databases} restaurado(s) com ${summary.databaseRecords} registro(s).`
+        : '';
+      showSuccess(
+        `Backup restaurado 100%: ${summary.storageKeys} chaves locais + ${summary.sessionKeys} de sessão.${vaultMsg}${dbMsg} Recarregando…`,
+      );
       setTimeout(() => { try { window.location.reload(); } catch {} }, 900);
     } catch (err: any) {
       showError('Falha ao restaurar backup completo: ' + (err?.message || err));
@@ -966,7 +971,9 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
         URL.revokeObjectURL(downloadUrl);
       }
 
-      showSuccess(`Backup completo baixado: ${exportObject.integrity.localStorageKeys} chaves + ${exportObject.integrity.catalogFiles}/${exportObject.integrity.catalogModels} STL/3MF do Vault.`);
+      showSuccess(
+        `Backup TOTAL baixado: ${exportObject.integrity.localStorageKeys} chaves locais, ${exportObject.integrity.catalogFiles}/${exportObject.integrity.catalogModels} STL/3MF e ${exportObject.integrity.indexedDbDatabases} banco(s) interno(s) (${exportObject.integrity.indexedDbRecords} registros).`,
+      );
     } catch (err: any) {
       showError('Ocorreu um erro ao exportar os dados: ' + err.message);
     }
