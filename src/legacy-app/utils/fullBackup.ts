@@ -149,7 +149,8 @@ async function encodeIdbValue(value: any): Promise<any> {
   }
   if (ArrayBuffer.isView(value)) {
     const view = value as ArrayBufferView;
-    return { __type: "arraybuffer", dataBase64: arrayBufferToBase64(view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength)) };
+    const buffer = view.buffer as ArrayBuffer;
+    return { __type: "arraybuffer", dataBase64: arrayBufferToBase64(buffer.slice(view.byteOffset, view.byteOffset + view.byteLength)) };
   }
   if (value instanceof Date) return { __type: "date", iso: value.toISOString() };
   if (Array.isArray(value)) return Promise.all(value.map(encodeIdbValue));
@@ -172,10 +173,14 @@ function decodeIdbValue(value: any): any {
   return out;
 }
 
-function openRawDb(name: string, version?: number, upgrade?: (db: IDBDatabase) => void): Promise<IDBDatabase> {
+function openRawDb(
+  name: string,
+  version?: number,
+  upgrade?: (db: IDBDatabase, tx: IDBTransaction | null) => void,
+): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = version ? indexedDB.open(name, version) : indexedDB.open(name);
-    if (upgrade) req.onupgradeneeded = () => upgrade(req.result);
+    if (upgrade) req.onupgradeneeded = () => upgrade(req.result, req.transaction);
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
     req.onblocked = () => reject(new Error(`IndexedDB bloqueado: ${name}`));
@@ -250,10 +255,10 @@ async function restoreIndexedDbDump(dumps: IdbDatabaseDump[]): Promise<{ databas
         req.onerror = () => resolve();
         req.onblocked = () => resolve();
       });
-      const db = await openRawDb(dump.name, Math.max(1, dump.version || 1), (raw) => {
+      const db = await openRawDb(dump.name, Math.max(1, dump.version || 1), (raw, tx) => {
         for (const store of dump.stores) {
-          const objectStore = raw.objectStoreNames.contains(store.name)
-            ? raw.transaction!.objectStore(store.name)
+          const objectStore = raw.objectStoreNames.contains(store.name) && tx
+            ? tx.objectStore(store.name)
             : raw.createObjectStore(store.name, {
                 keyPath: (store.keyPath as any) ?? undefined,
                 autoIncrement: Boolean(store.autoIncrement),
