@@ -1,7 +1,7 @@
 import type { ModelRecord } from "@/lib/catalog-db";
 
 export const GESTAO3D_BACKUP_SIGNATURE = "Gestao3D_Backup";
-export const GESTAO3D_BACKUP_VERSION = "3.0.0.0.6";
+export const GESTAO3D_BACKUP_VERSION = "3.0.0.0.7";
 
 type StorageDump = Record<string, string>;
 
@@ -21,6 +21,21 @@ type CatalogVaultBackup = {
   missingFileModelIds: string[];
 };
 
+/** Dump genérico de QUALQUER banco IndexedDB do app (backup 100%). */
+export type IdbStoreDump = {
+  name: string;
+  keyPath: string | string[] | null;
+  autoIncrement: boolean;
+  indexes: Array<{ name: string; keyPath: string | string[]; unique: boolean; multiEntry: boolean }>;
+  records: Array<{ key?: unknown; value: unknown }>;
+};
+
+export type IdbDatabaseDump = {
+  name: string;
+  version: number;
+  stores: IdbStoreDump[];
+};
+
 export type CompleteBackup = Record<string, unknown> & {
   app_signature: string;
   version: string;
@@ -29,12 +44,17 @@ export type CompleteBackup = Record<string, unknown> & {
   exportedAt: string;
   storage: StorageDump;
   localStorage: StorageDump;
+  sessionStorage: StorageDump;
   catalogVault: CatalogVaultBackup;
+  indexedDbVault: IdbDatabaseDump[];
   integrity: {
     localStorageKeys: number;
+    sessionStorageKeys: number;
     catalogModels: number;
     catalogFiles: number;
     missingCatalogFiles: number;
+    indexedDbDatabases: number;
+    indexedDbRecords: number;
     checksum?: string;
     checksumAlgo?: "sha-256";
   };
@@ -42,10 +62,13 @@ export type CompleteBackup = Record<string, unknown> & {
 
 export type RestoreSummary = {
   storageKeys: number;
+  sessionKeys: number;
   catalogModels: number;
   catalogFiles: number;
   missingCatalogFiles: number;
   hasCatalogBackup: boolean;
+  databases: number;
+  databaseRecords: number;
 };
 
 export class BackupIntegrityError extends Error {
