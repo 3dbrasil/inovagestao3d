@@ -15,6 +15,40 @@ export interface VersionEntry {
 
 export const VERSION_HISTORY: VersionEntry[] = [
   {
+    version: "3.0.0.0.8",
+    date: "2026-08-10",
+    changes: [
+      "Backup TOTAL: agora salva e restaura todos os bancos internos (IndexedDB), sessão e localStorage — nunca mais backup parcial",
+      "Olist promovida para o menu Principal e Criar Produto IA movida para Marketing",
+      "Importar pedidos e vendas da Olist direto para Pedidos/Produção/Histórico",
+      "Ao criar produto com estoque inicial, o filamento e os insumos são debitados do estoque real",
+    ],
+  },
+  {
+    version: "3.0.0.0.7",
+    date: "2026-08-09",
+    changes: [
+      "Aba Criar Produto IA: cadastro completo gerado por IA a partir de foto ou título e envio direto para a Olist",
+      "Campo de cor do filamento no cadastro para debitar o carretel correto",
+    ],
+  },
+  {
+    version: "3.0.0.0.6",
+    date: "2026-08-08",
+    changes: [
+      "Estoque real x estoque virtual (anunciado) separados por produto",
+      "Atalhos de estoque anunciado (real +5/+10/+20) na importação da Olist",
+    ],
+  },
+  {
+    version: "3.0.0.0.5",
+    date: "2026-08-07",
+    changes: [
+      "Integração Olist/Tiny: pedidos, produtos, estoque e vendas por marketplace",
+      "Variações da Olist agrupadas em um único produto do catálogo",
+    ],
+  },
+  {
     version: "3.0.0.0.4",
     date: "2026-07-11",
     changes: [
