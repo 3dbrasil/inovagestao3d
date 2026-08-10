@@ -555,6 +555,10 @@ export async function restoreCompleteBackup(json: any): Promise<RestoreSummary> 
   let missingCatalogFiles = 0;
 
   const catalogAlreadyRestored = idbDumps.some((d) => d?.name === "imprimetrics-catalog");
+  if (catalogSource && catalogAlreadyRestored) {
+    catalogModels = catalogSource.models.length;
+    catalogFiles = catalogSource.files.length;
+  }
   if (catalogSource && !catalogAlreadyRestored) {
     const { listModels, deleteModel, saveModel } = await import("@/lib/catalog-db");
     const existing = await listModels().catch(() => [] as ModelRecord[]);
