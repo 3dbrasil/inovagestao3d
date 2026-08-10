@@ -1709,6 +1709,7 @@ export default function App() {
             {
               section: 'Principal',
               items: [
+                { id: 21, label: 'Olist', icon: Store },
                 { id: 2, label: 'Clientes', icon: Users },
                 { id: 3, label: 'Pedidos', icon: GitPullRequest, badge: pendingOrdersCount, blink: pendingOrdersBlink },
                 { id: 1, label: 'Produção', icon: Activity, badge: awaitingAcceptCount, blink: productionBlink },
@@ -1728,6 +1729,7 @@ export default function App() {
             {
               section: 'Marketing',
               items: [
+                { id: 22, label: 'Criar Produto IA', icon: Sparkles },
                 { id: 7, label: 'Preços', icon: Search },
                 { id: 9, label: 'Marketing', icon: Megaphone },
                 { id: 15, label: 'Prospecção', icon: Radar },
@@ -1752,8 +1754,6 @@ export default function App() {
               items: [
                 { id: 13, label: 'Agenda', icon: Calendar },
                 { id: 20, label: 'WhatsApp', icon: MessageCircle },
-                { id: 21, label: 'Olist', icon: Store },
-                { id: 22, label: 'Criar Produto IA', icon: Sparkles },
                 { id: 5, label: 'Ajustes', icon: Settings },
               ],
             },
