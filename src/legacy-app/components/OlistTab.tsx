@@ -1,14 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   RefreshCw, ShoppingBag, Package, TrendingUp, Store, AlertTriangle,
-  CheckCircle2, Download, Search,
+  CheckCircle2, Download, Search, GitPullRequest,
 } from 'lucide-react';
 import { olistStatus, olistSync } from '@/lib/olist.functions';
 import { safeStorage } from '../utils/storage';
 import { groupVariations } from './olist/grouping';
 import { OlistImportModal } from './olist/OlistImportModal';
+import type { CatalogItem, PrintOrder } from '../types';
 
 const SNAPSHOT_KEY = 'olist_snapshot_v1';
+const ORDERS_KEY = 'bambuzau_orders';
+const CATALOG_KEY = 'bambuzau_local_catalog_production';
 const AUTO_SYNC_MS = 30 * 60 * 1000; // 30 min
 
 type OlistOrder = {
@@ -37,6 +40,95 @@ function readSnapshot(): Snapshot | null {
   }
 }
 
+function readList<T>(key: string): T[] {
+  try {
+    const raw = safeStorage.getItem(key);
+    const list = raw ? JSON.parse(raw) : [];
+    return Array.isArray(list) ? (list as T[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function platformFrom(marketplace: string): PrintOrder['platformSource'] {
+  const m = (marketplace || '').toLowerCase();
+  if (m.includes('shopee')) return 'SHOPEE';
+  if (m.includes('mercado')) return 'MERCADO_LIVRE';
+  if (m.includes('amazon')) return 'AMAZON';
+  if (m.includes('nuvem')) return 'NUVEMSHOP';
+  if (m.includes('tiktok')) return 'TIKTOK_SHOP';
+  return 'MANUAL';
+}
+
+function statusFrom(situacao: string): PrintOrder['status'] | null {
+  const s = (situacao || '').toLowerCase();
+  if (s.includes('cancel')) return null;
+  if (s.includes('entregue')) return 'DELIVERED';
+  if (s.includes('envi') || s.includes('despach') || s.includes('faturad')) return 'READY';
+  if (s.includes('prepar') || s.includes('separa')) return 'QUEUE';
+  return 'WAITING';
+}
+
+/** Traz os pedidos/vendas da Olist para o sistema (Pedidos, Produção e Histórico). */
+function importOlistOrders(orders: OlistOrder[]): { created: number; skipped: number } {
+  const existing = readList<PrintOrder>(ORDERS_KEY);
+  const catalog = readList<CatalogItem>(CATALOG_KEY);
+  const seen = new Set(existing.map((o) => String(o.platformOrderId || '')));
+  const created: PrintOrder[] = [];
+  let skipped = 0;
+  let seq = Date.now();
+
+  for (const order of orders) {
+    const status = statusFrom(order.situacao);
+    if (!status) { skipped += 1; continue; }
+    const itens = order.itens?.length
+      ? order.itens
+      : [{ sku: '', nome: `Pedido #${order.numero}`, quantidade: 1, valorUnitario: order.valor || 0 }];
+
+    itens.forEach((item, index) => {
+      const externalId = `OLIST-${order.numero || order.id}-${index}`;
+      if (seen.has(externalId)) { skipped += 1; return; }
+      seen.add(externalId);
+      const match = catalog.find(
+        (c) =>
+          (item.sku && String(c.productCode || '').toUpperCase() === item.sku.toUpperCase()) ||
+          (item.nome && c.name?.toLowerCase() === item.nome.toLowerCase()),
+      );
+      const createdAt = Date.parse(order.data) || Date.now();
+      created.push({
+        id: seq++,
+        clientId: null,
+        clientName: order.cliente || 'Cliente marketplace',
+        itemName: item.nome || match?.name || `Item ${item.sku}`,
+        quantity: Math.max(1, Math.round(item.quantidade || 1)),
+        filamentType: match?.filamentType || 'PLA',
+        filamentColor: match?.filamentColorsUsed || '',
+        weightGrams: match?.weightGrams || 0,
+        printTimeHours: match?.printTimeHours || 0,
+        priceCharged: (item.valorUnitario || 0) * Math.max(1, item.quantidade || 1),
+        platformSource: platformFrom(order.marketplace),
+        platformOrderId: externalId,
+        status,
+        printingProgress: status === 'DELIVERED' ? 1 : 0,
+        assignedPrinterId: null,
+        createdAt,
+        deadline: createdAt + 3 * 24 * 60 * 60 * 1000,
+        paymentStatus: 'PAGO',
+        imageUrl: match?.imageUrl,
+      } as PrintOrder);
+    });
+  }
+
+  if (created.length) {
+    safeStorage.setItem(ORDERS_KEY, JSON.stringify([...existing, ...created]));
+    try {
+      window.dispatchEvent(new Event('bambuzau_orders_updated'));
+      window.dispatchEvent(new Event('storage'));
+    } catch { /* noop */ }
+  }
+  return { created: created.length, skipped };
+}
+
 const Kpi: React.FC<{ icon: React.ReactNode; label: string; value: string; hint?: string; tone: string }> = ({
   icon, label, value, hint, tone,
 }) => (
@@ -61,6 +153,7 @@ export const OlistTab: React.FC = () => {
   const [query, setQuery] = useState('');
   const [importOpen, setImportOpen] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [importingOrders, setImportingOrders] = useState(false);
 
   useEffect(() => {
     setSnapshot(readSnapshot());
@@ -126,6 +219,23 @@ export const OlistTab: React.FC = () => {
 
   const groups = useMemo(() => groupVariations(products), [products]);
 
+  const importOrders = useCallback(() => {
+    setError(null);
+    setImportingOrders(true);
+    try {
+      const r = importOlistOrders(orders);
+      setMsg(
+        r.created
+          ? `${r.created} pedido(s) da Olist importados para o sistema (${r.skipped} já existiam ou foram cancelados). Recarregue para ver na Produção.`
+          : 'Nenhum pedido novo para importar — tudo já está no sistema.',
+      );
+    } catch (e: any) {
+      setError(e?.message || 'Falha ao importar pedidos da Olist.');
+    } finally {
+      setImportingOrders(false);
+    }
+  }, [orders]);
+
   const filteredGroups = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return groups.slice(0, 300);
@@ -167,6 +277,13 @@ export const OlistTab: React.FC = () => {
             className="flex items-center gap-2 rounded-xl border border-white/15 px-4 py-2 text-xs font-bold text-white transition hover:bg-white/10 disabled:opacity-40"
           >
             <Download className="h-4 w-4" /> Importar p/ catálogo
+          </button>
+          <button
+            onClick={importOrders}
+            disabled={!orders.length || importingOrders}
+            className="flex items-center gap-2 rounded-xl border border-white/15 px-4 py-2 text-xs font-bold text-white transition hover:bg-white/10 disabled:opacity-40"
+          >
+            <GitPullRequest className="h-4 w-4" /> Importar pedidos
           </button>
         </div>
       </div>
