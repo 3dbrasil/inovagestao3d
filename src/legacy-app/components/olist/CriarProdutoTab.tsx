@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { aiProductDraft, olistCreateProduct } from '@/lib/olist.functions';
 import { safeStorage } from '../../utils/storage';
+import { debitProductionMaterials } from '../../utils/stockDebit';
 import type { CatalogItem } from '../../types';
 
 const CATALOG_KEY = 'bambuzau_local_catalog_production';
@@ -16,6 +17,7 @@ type Form = {
   estoqueInicial: string; estoqueMinimo: string; garantia: string; observacoes: string;
   seoTitle: string; seoDescription: string; seoKeywords: string;
   tempoImpressaoHoras: string; pesoFilamentoGramas: string; materialSugerido: string;
+  corFilamento: string;
 };
 
 const EMPTY: Form = {
@@ -26,6 +28,7 @@ const EMPTY: Form = {
   estoqueInicial: '0', estoqueMinimo: '1', garantia: '90 dias', observacoes: '',
   seoTitle: '', seoDescription: '', seoKeywords: '',
   tempoImpressaoHoras: '', pesoFilamentoGramas: '', materialSugerido: 'PLA',
+  corFilamento: '',
 };
 
 const n = (v: string) => {
@@ -69,6 +72,7 @@ export const CriarProdutoTab: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [alsoLocal, setAlsoLocal] = useState(true);
+  const [debitStock, setDebitStock] = useState(true);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const set = useCallback(<K extends keyof Form>(k: K, v: string) => setForm((f) => ({ ...f, [k]: v })), []);
@@ -169,6 +173,7 @@ export const CriarProdutoTab: React.FC = () => {
         minStockCount: n(form.estoqueMinimo),
         productCode: form.sku,
         virtualStockCount: n(form.estoqueInicial),
+        filamentColorsUsed: form.corFilamento || undefined,
         imageUrl: images[0] || undefined,
       };
       list.push(item);
@@ -220,9 +225,21 @@ export const CriarProdutoTab: React.FC = () => {
         },
       })) as { id: string; flavor: string };
       if (alsoLocal) saveLocalCatalog();
+      // Estoque inicial => produção real => debita matéria-prima do estoque.
+      let debitMsg = '';
+      if (debitStock && n(form.estoqueInicial) > 0 && n(form.pesoFilamentoGramas) > 0) {
+        const r = debitProductionMaterials({
+          units: n(form.estoqueInicial),
+          gramsPerUnit: n(form.pesoFilamentoGramas),
+          filamentType: form.materialSugerido,
+          filamentColor: form.corFilamento,
+        });
+        debitMsg = r.messages.length ? ` ${r.messages.join(' ')}` : '';
+      }
       setMsg(
         `Produto criado na Olist (${res.flavor === 'v3' ? 'API v3' : 'API v2'})${res.id ? ` · ID ${res.id}` : ''}.` +
           (alsoLocal ? ' Também salvo no catálogo do Gestão 3D.' : '') +
+          debitMsg +
           (images.length && !httpImages.length
             ? ' As fotos enviadas do computador ficaram só no sistema — para aparecerem na Olist, cole a URL pública da imagem.'
             : ''),
@@ -236,7 +253,7 @@ export const CriarProdutoTab: React.FC = () => {
     } finally {
       setSending(false);
     }
-  }, [form, images, alsoLocal, saveLocalCatalog]);
+  }, [form, images, alsoLocal, debitStock, saveLocalCatalog]);
 
   return (
     <div className="space-y-5">
@@ -363,6 +380,20 @@ export const CriarProdutoTab: React.FC = () => {
             <Field label="Material" value={form.materialSugerido} onChange={(v) => set('materialSugerido', v)} />
             <Field label="Filamento (g)" value={form.pesoFilamentoGramas} onChange={(v) => set('pesoFilamentoGramas', v)} />
             <Field label="Tempo de impressão (h)" value={form.tempoImpressaoHoras} onChange={(v) => set('tempoImpressaoHoras', v)} />
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field
+              label="Cor do filamento"
+              value={form.corFilamento}
+              onChange={(v) => set('corFilamento', v)}
+              placeholder="Ex: Preto"
+              hint="Usada para debitar o carretel certo do estoque"
+            />
+            <label className="flex items-end gap-2 pb-1 text-[11px] font-bold text-white/70">
+              <input type="checkbox" checked={debitStock} onChange={(e) => setDebitStock(e.target.checked)} className="h-4 w-4 accent-[#b7ff00]" />
+              Debitar material do estoque conforme o estoque inicial
+            </label>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
