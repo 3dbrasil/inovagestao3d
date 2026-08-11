@@ -3,6 +3,8 @@ import {
   Sparkles, Upload, Send, Loader2, AlertTriangle, CheckCircle2, ImagePlus, Trash2, Wand2, Store,
 } from 'lucide-react';
 import { aiProductDraft, olistCreateProduct } from '@/lib/olist.functions';
+import { inovaCreateProduct } from '@/lib/inovastudio.functions';
+import { PriceCalculator } from './PriceCalculator';
 import { safeStorage } from '../../utils/storage';
 import { debitProductionMaterials } from '../../utils/stockDebit';
 import type { CatalogItem } from '../../types';
@@ -25,7 +27,7 @@ const EMPTY: Form = {
   preco: '', precoCusto: '', precoPromocional: '', unidade: 'UN',
   ncm: '39269090', origem: '0', gtin: '', marca: '', categoria: '',
   pesoLiquido: '', pesoBruto: '', largura: '', altura: '', profundidade: '',
-  estoqueInicial: '0', estoqueMinimo: '1', garantia: '90 dias', observacoes: '',
+  estoqueInicial: '1', estoqueMinimo: '1', garantia: '90 dias', observacoes: '',
   seoTitle: '', seoDescription: '', seoKeywords: '',
   tempoImpressaoHoras: '', pesoFilamentoGramas: '', materialSugerido: 'PLA',
   corFilamento: '',
@@ -72,6 +74,8 @@ export const CriarProdutoTab: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [alsoLocal, setAlsoLocal] = useState(true);
+  const [alsoOlist, setAlsoOlist] = useState(true);
+  const [alsoSite, setAlsoSite] = useState(true);
   const [debitStock, setDebitStock] = useState(true);
   const fileRef = useRef<HTMLInputElement>(null);
 
