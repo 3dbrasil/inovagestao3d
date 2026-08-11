@@ -47,7 +47,7 @@ export async function signIn(env: Env): Promise<string> {
   return String(json.access_token);
 }
 
-function dataUrlToBytes(dataUrl: string): { bytes: Uint8Array; mime: string; ext: string } | null {
+function dataUrlToBytes(dataUrl: string): { buffer: ArrayBuffer; mime: string; ext: string } | null {
   const match = /^data:([^;,]+);base64,(.*)$/i.exec(dataUrl);
   if (!match) return null;
   const mime = match[1] || 'image/jpeg';
@@ -56,7 +56,7 @@ function dataUrlToBytes(dataUrl: string): { bytes: Uint8Array; mime: string; ext
   const bytes = new Uint8Array(buffer);
   for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
   const ext = mime.split('/')[1]?.replace('jpeg', 'jpg') || 'jpg';
-  return { bytes, mime, ext };
+  return { buffer, mime, ext };
 }
 
 /** Sobe uma imagem (data URL) para o bucket product-images e devolve URL assinada de 1 ano. */
@@ -73,7 +73,7 @@ export async function uploadImage(env: Env, token: string, image: string): Promi
       'Content-Type': decoded.mime,
       'cache-control': '31536000',
     },
-    body: new Blob([decoded.bytes], { type: decoded.mime }),
+    body: new Blob([decoded.buffer], { type: decoded.mime }),
   });
   if (!up.ok) {
     const detail = await up.text().catch(() => '');
