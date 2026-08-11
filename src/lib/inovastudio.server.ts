@@ -52,7 +52,8 @@ function dataUrlToBytes(dataUrl: string): { bytes: Uint8Array; mime: string; ext
   if (!match) return null;
   const mime = match[1] || 'image/jpeg';
   const binary = atob(match[2] || '');
-  const bytes = new Uint8Array(binary.length);
+  const buffer = new ArrayBuffer(binary.length);
+  const bytes = new Uint8Array(buffer);
   for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
   const ext = mime.split('/')[1]?.replace('jpeg', 'jpg') || 'jpg';
   return { bytes, mime, ext };
