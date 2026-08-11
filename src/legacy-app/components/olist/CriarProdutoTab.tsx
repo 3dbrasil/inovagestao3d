@@ -3,6 +3,8 @@ import {
   Sparkles, Upload, Send, Loader2, AlertTriangle, CheckCircle2, ImagePlus, Trash2, Wand2, Store,
 } from 'lucide-react';
 import { aiProductDraft, olistCreateProduct } from '@/lib/olist.functions';
+import { inovaCreateProduct } from '@/lib/inovastudio.functions';
+import { PriceCalculator } from './PriceCalculator';
 import { safeStorage } from '../../utils/storage';
 import { debitProductionMaterials } from '../../utils/stockDebit';
 import type { CatalogItem } from '../../types';
@@ -25,7 +27,7 @@ const EMPTY: Form = {
   preco: '', precoCusto: '', precoPromocional: '', unidade: 'UN',
   ncm: '39269090', origem: '0', gtin: '', marca: '', categoria: '',
   pesoLiquido: '', pesoBruto: '', largura: '', altura: '', profundidade: '',
-  estoqueInicial: '0', estoqueMinimo: '1', garantia: '90 dias', observacoes: '',
+  estoqueInicial: '1', estoqueMinimo: '1', garantia: '90 dias', observacoes: '',
   seoTitle: '', seoDescription: '', seoKeywords: '',
   tempoImpressaoHoras: '', pesoFilamentoGramas: '', materialSugerido: 'PLA',
   corFilamento: '',
@@ -72,6 +74,8 @@ export const CriarProdutoTab: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [alsoLocal, setAlsoLocal] = useState(true);
+  const [alsoOlist, setAlsoOlist] = useState(true);
+  const [alsoSite, setAlsoSite] = useState(true);
   const [debitStock, setDebitStock] = useState(true);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -194,8 +198,10 @@ export const CriarProdutoTab: React.FC = () => {
     setSending(true);
     try {
       const httpImages = images.filter((i) => /^https?:\/\//i.test(i));
-      const res = (await olistCreateProduct({
-        data: {
+      let olistMsg = '';
+      if (alsoOlist) {
+        const res = (await olistCreateProduct({
+          data: {
           nome: form.nome.trim(),
           sku: form.sku.trim().toUpperCase(),
           descricao: form.descricao,
@@ -222,8 +228,32 @@ export const CriarProdutoTab: React.FC = () => {
           seoDescription: form.seoDescription,
           seoKeywords: form.seoKeywords,
           imagens: httpImages,
-        },
-      })) as { id: string; flavor: string };
+          },
+        })) as { id: string; flavor: string };
+        olistMsg = `Produto criado na Olist (${res.flavor === 'v3' ? 'API v3' : 'API v2'})${res.id ? ` · ID ${res.id}` : ''}.`;
+      }
+
+      let siteMsg = '';
+      if (alsoSite) {
+        try {
+          const site = (await inovaCreateProduct({
+            data: {
+              name: form.nome.trim(),
+              description: form.descricao,
+              longDescription: form.descricaoComplementar,
+              price: n(form.preco),
+              promoPrice: n(form.precoPromocional) || undefined,
+              stock: Math.max(1, n(form.estoqueInicial) || 1),
+              weightGrams: n(form.pesoFilamentoGramas) || n(form.pesoLiquido) * 1000 || undefined,
+              image: images[0] || undefined,
+              extraImages: images.slice(1, 8),
+            },
+          })) as { id: string; images: number };
+          siteMsg = ` Publicado no site Inovastudio com ${site.images} foto(s).`;
+        } catch (e: any) {
+          siteMsg = ` Falha ao publicar no site: ${e?.message || e}`;
+        }
+      }
       if (alsoLocal) saveLocalCatalog();
       // Estoque inicial => produção real => debita matéria-prima do estoque.
       let debitMsg = '';
@@ -237,10 +267,11 @@ export const CriarProdutoTab: React.FC = () => {
         debitMsg = r.messages.length ? ` ${r.messages.join(' ')}` : '';
       }
       setMsg(
-        `Produto criado na Olist (${res.flavor === 'v3' ? 'API v3' : 'API v2'})${res.id ? ` · ID ${res.id}` : ''}.` +
+        olistMsg +
+          siteMsg +
           (alsoLocal ? ' Também salvo no catálogo do Gestão 3D.' : '') +
           debitMsg +
-          (images.length && !httpImages.length
+          (alsoOlist && images.length && !httpImages.length
             ? ' As fotos enviadas do computador ficaram só no sistema — para aparecerem na Olist, cole a URL pública da imagem.'
             : ''),
       );
@@ -249,11 +280,11 @@ export const CriarProdutoTab: React.FC = () => {
       setIdeia('');
       setContexto('');
     } catch (e: any) {
-      setError(e?.message || 'Falha ao criar o produto na Olist.');
+      setError(e?.message || 'Falha ao criar o produto.');
     } finally {
       setSending(false);
     }
-  }, [form, images, alsoLocal, debitStock, saveLocalCatalog]);
+  }, [form, images, alsoLocal, alsoOlist, alsoSite, debitStock, saveLocalCatalog]);
 
   return (
     <div className="space-y-5">
@@ -336,6 +367,15 @@ export const CriarProdutoTab: React.FC = () => {
             {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
             {generating ? 'Gerando cadastro…' : 'Gerar cadastro com IA'}
           </button>
+
+          <PriceCalculator
+            inputs={{
+              weightGrams: n(form.pesoFilamentoGramas),
+              hours: n(form.tempoImpressaoHoras),
+              material: form.materialSugerido || 'PLA',
+            }}
+            onUsePrice={(p) => set('preco', String(p))}
+          />
         </div>
 
         {/* Formulário completo */}
@@ -404,21 +444,31 @@ export const CriarProdutoTab: React.FC = () => {
           </div>
 
           <div className="flex flex-col gap-3 border-t border-white/10 pt-3 sm:flex-row sm:items-center sm:justify-between">
-            <label className="flex items-center gap-2 text-[11px] text-white/60">
-              <input type="checkbox" checked={alsoLocal} onChange={(e) => setAlsoLocal(e.target.checked)} className="accent-[#b7ff00]" />
-              Salvar também no catálogo do Gestão 3D
-            </label>
+            <div className="flex flex-wrap gap-x-4 gap-y-1">
+              <label className="flex items-center gap-2 text-[11px] text-white/60">
+                <input type="checkbox" checked={alsoLocal} onChange={(e) => setAlsoLocal(e.target.checked)} className="accent-[#b7ff00]" />
+                Salvar no catálogo do Gestão 3D
+              </label>
+              <label className="flex items-center gap-2 text-[11px] text-white/60">
+                <input type="checkbox" checked={alsoOlist} onChange={(e) => setAlsoOlist(e.target.checked)} className="accent-[#b7ff00]" />
+                Enviar para a Olist
+              </label>
+              <label className="flex items-center gap-2 text-[11px] text-white/60">
+                <input type="checkbox" checked={alsoSite} onChange={(e) => setAlsoSite(e.target.checked)} className="accent-[#b7ff00]" />
+                Publicar no site Inovastudio
+              </label>
+            </div>
             <button
               onClick={() => void enviar()}
               disabled={sending}
               className="flex items-center justify-center gap-2 rounded-xl bg-[#b7ff00] px-5 py-2.5 text-xs font-black text-black transition hover:brightness-110 disabled:opacity-50"
             >
               {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              {sending ? 'Enviando para a Olist…' : 'Criar produto na Olist'}
+              {sending ? 'Enviando…' : 'Criar produto'}
             </button>
           </div>
           <div className="flex items-center gap-1.5 text-[10px] text-white/30">
-            <Store className="h-3 w-3" /> O produto criado aparece na aba Olist após a próxima sincronização.
+            <Store className="h-3 w-3" /> As fotos do upload vão para o site Inovastudio automaticamente (a Olist só aceita URL pública).
           </div>
         </div>
       </div>
