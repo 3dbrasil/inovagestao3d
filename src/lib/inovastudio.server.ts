@@ -72,7 +72,7 @@ export async function uploadImage(env: Env, token: string, image: string): Promi
       'Content-Type': decoded.mime,
       'cache-control': '31536000',
     },
-    body: decoded.bytes,
+    body: new Blob([decoded.bytes], { type: decoded.mime }),
   });
   if (!up.ok) {
     const detail = await up.text().catch(() => '');
