@@ -367,6 +367,15 @@ export const CriarProdutoTab: React.FC = () => {
             {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
             {generating ? 'Gerando cadastro…' : 'Gerar cadastro com IA'}
           </button>
+
+          <PriceCalculator
+            inputs={{
+              weightGrams: n(form.pesoFilamentoGramas),
+              hours: n(form.tempoImpressaoHoras),
+              material: form.materialSugerido || 'PLA',
+            }}
+            onUsePrice={(p) => set('preco', String(p))}
+          />
         </div>
 
         {/* Formulário completo */}
@@ -435,21 +444,31 @@ export const CriarProdutoTab: React.FC = () => {
           </div>
 
           <div className="flex flex-col gap-3 border-t border-white/10 pt-3 sm:flex-row sm:items-center sm:justify-between">
-            <label className="flex items-center gap-2 text-[11px] text-white/60">
-              <input type="checkbox" checked={alsoLocal} onChange={(e) => setAlsoLocal(e.target.checked)} className="accent-[#b7ff00]" />
-              Salvar também no catálogo do Gestão 3D
-            </label>
+            <div className="flex flex-wrap gap-x-4 gap-y-1">
+              <label className="flex items-center gap-2 text-[11px] text-white/60">
+                <input type="checkbox" checked={alsoLocal} onChange={(e) => setAlsoLocal(e.target.checked)} className="accent-[#b7ff00]" />
+                Salvar no catálogo do Gestão 3D
+              </label>
+              <label className="flex items-center gap-2 text-[11px] text-white/60">
+                <input type="checkbox" checked={alsoOlist} onChange={(e) => setAlsoOlist(e.target.checked)} className="accent-[#b7ff00]" />
+                Enviar para a Olist
+              </label>
+              <label className="flex items-center gap-2 text-[11px] text-white/60">
+                <input type="checkbox" checked={alsoSite} onChange={(e) => setAlsoSite(e.target.checked)} className="accent-[#b7ff00]" />
+                Publicar no site Inovastudio
+              </label>
+            </div>
             <button
               onClick={() => void enviar()}
               disabled={sending}
               className="flex items-center justify-center gap-2 rounded-xl bg-[#b7ff00] px-5 py-2.5 text-xs font-black text-black transition hover:brightness-110 disabled:opacity-50"
             >
               {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              {sending ? 'Enviando para a Olist…' : 'Criar produto na Olist'}
+              {sending ? 'Enviando…' : 'Criar produto'}
             </button>
           </div>
           <div className="flex items-center gap-1.5 text-[10px] text-white/30">
-            <Store className="h-3 w-3" /> O produto criado aparece na aba Olist após a próxima sincronização.
+            <Store className="h-3 w-3" /> As fotos do upload vão para o site Inovastudio automaticamente (a Olist só aceita URL pública).
           </div>
         </div>
       </div>
