@@ -198,8 +198,10 @@ export const CriarProdutoTab: React.FC = () => {
     setSending(true);
     try {
       const httpImages = images.filter((i) => /^https?:\/\//i.test(i));
-      const res = (await olistCreateProduct({
-        data: {
+      let olistMsg = '';
+      if (alsoOlist) {
+        const res = (await olistCreateProduct({
+          data: {
           nome: form.nome.trim(),
           sku: form.sku.trim().toUpperCase(),
           descricao: form.descricao,
@@ -226,8 +228,32 @@ export const CriarProdutoTab: React.FC = () => {
           seoDescription: form.seoDescription,
           seoKeywords: form.seoKeywords,
           imagens: httpImages,
-        },
-      })) as { id: string; flavor: string };
+          },
+        })) as { id: string; flavor: string };
+        olistMsg = `Produto criado na Olist (${res.flavor === 'v3' ? 'API v3' : 'API v2'})${res.id ? ` · ID ${res.id}` : ''}.`;
+      }
+
+      let siteMsg = '';
+      if (alsoSite) {
+        try {
+          const site = (await inovaCreateProduct({
+            data: {
+              name: form.nome.trim(),
+              description: form.descricao,
+              longDescription: form.descricaoComplementar,
+              price: n(form.preco),
+              promoPrice: n(form.precoPromocional) || undefined,
+              stock: Math.max(1, n(form.estoqueInicial) || 1),
+              weightGrams: n(form.pesoFilamentoGramas) || n(form.pesoLiquido) * 1000 || undefined,
+              image: images[0] || undefined,
+              extraImages: images.slice(1, 8),
+            },
+          })) as { id: string; images: number };
+          siteMsg = ` Publicado no site Inovastudio com ${site.images} foto(s).`;
+        } catch (e: any) {
+          siteMsg = ` Falha ao publicar no site: ${e?.message || e}`;
+        }
+      }
       if (alsoLocal) saveLocalCatalog();
       // Estoque inicial => produção real => debita matéria-prima do estoque.
       let debitMsg = '';
@@ -241,10 +267,11 @@ export const CriarProdutoTab: React.FC = () => {
         debitMsg = r.messages.length ? ` ${r.messages.join(' ')}` : '';
       }
       setMsg(
-        `Produto criado na Olist (${res.flavor === 'v3' ? 'API v3' : 'API v2'})${res.id ? ` · ID ${res.id}` : ''}.` +
+        olistMsg +
+          siteMsg +
           (alsoLocal ? ' Também salvo no catálogo do Gestão 3D.' : '') +
           debitMsg +
-          (images.length && !httpImages.length
+          (alsoOlist && images.length && !httpImages.length
             ? ' As fotos enviadas do computador ficaram só no sistema — para aparecerem na Olist, cole a URL pública da imagem.'
             : ''),
       );
@@ -253,11 +280,11 @@ export const CriarProdutoTab: React.FC = () => {
       setIdeia('');
       setContexto('');
     } catch (e: any) {
-      setError(e?.message || 'Falha ao criar o produto na Olist.');
+      setError(e?.message || 'Falha ao criar o produto.');
     } finally {
       setSending(false);
     }
-  }, [form, images, alsoLocal, debitStock, saveLocalCatalog]);
+  }, [form, images, alsoLocal, alsoOlist, alsoSite, debitStock, saveLocalCatalog]);
 
   return (
     <div className="space-y-5">
