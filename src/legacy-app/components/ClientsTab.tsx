@@ -672,6 +672,30 @@ export const ClientsTab: React.FC<ClientsTabProps> = ({
                   }`}
                   id={`printer_grid_card_${printer.id}`}
                 >
+                  <div className="absolute right-1.5 top-1.5 z-10 flex gap-1 opacity-70 transition group-hover:opacity-100">
+                    <button
+                      type="button"
+                      title="Editar impressora"
+                      onClick={(e) => { e.stopPropagation(); startEditPrinter(printer); }}
+                      className="rounded-md border border-amber-500/30 bg-black/70 p-1 text-amber-400 hover:bg-amber-500/20"
+                    >
+                      <Edit3 className="h-3 w-3" />
+                    </button>
+                    <button
+                      type="button"
+                      title="Excluir impressora"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm(`Excluir a impressora "${printer.name}"? Esta ação não pode ser desfeita.`)) {
+                          onDeletePrinter(printer.id);
+                          if (selectedPrinterDetails?.id === printer.id) setSelectedPrinterDetails(null);
+                        }
+                      }}
+                      className="rounded-md border border-red-500/30 bg-black/70 p-1 text-red-400 hover:bg-red-500/20"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
                   <div className="relative w-20 h-20 rounded-lg overflow-hidden shrink-0 bg-black/40">
                     <img
                       src={imageUrl}
