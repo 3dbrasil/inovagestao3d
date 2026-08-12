@@ -245,7 +245,13 @@ export const CriarProdutoTab: React.FC = () => {
           estoqueInicial: n(form.estoqueInicial),
           estoqueMinimo: n(form.estoqueMinimo),
           garantia: form.garantia,
-          observacoes: form.observacoes,
+          observacoes: [
+            form.observacoes,
+            form.categoriaMercadoLivre ? `Categoria ML: ${form.categoriaMercadoLivre}` : '',
+            form.categoriaShopee ? `Categoria Shopee: ${form.categoriaShopee}` : '',
+          ]
+            .filter(Boolean)
+            .join(' | '),
           seoTitle: form.seoTitle,
           seoDescription: form.seoDescription,
           seoKeywords: form.seoKeywords,

@@ -180,19 +180,77 @@ export const ClientsTab: React.FC<ClientsTabProps> = ({
     alert('Nova impressora cadastrada com sucesso!');
   };
 
-  const handleTestPrinterConnection = (printerId: number) => {
+  /** Conexão real: Moonraker (Klipper) e OctoPrint via HTTP. */
+  const handleTestPrinterConnection = async (printerId: number) => {
+    const printer = printers.find(p => p.id === printerId);
+    if (!printer) return;
+    const host = (printer.ipAddress || '').trim().replace(/^https?:\/\//, '').replace(/\/$/, '');
+    if (!host) { alert('Preencha o IP local da impressora primeiro.'); return; }
+
+    if (printer.apiType === 'BAMBU_CLOUD') {
+      alert(
+        'Bambu Lab usa MQTT na porta 8883 (não existe 9883) e o navegador não consegue abrir MQTT/TLS direto.\n\n' +
+        'Use o modo LAN com Moonraker/OctoPrint, ou registre a máquina como manual e acompanhe pelo Bambu Studio.'
+      );
+      return;
+    }
+
+    const port = (printer.port || (printer.apiType === 'OCTOPRINT' ? '80' : '7125')).trim();
+    const base = `http://${host}${port && port !== '80' ? `:${port}` : ''}`;
     setIsTestingConnId(printerId);
-    setTimeout(() => {
-      onUpdatePrinter(printerId, {
-        isOnline: true,
-        nozzleTemp: Math.floor(190 + Math.random() * 40),
-        bedTemp: Math.floor(50 + Math.random() * 20),
-        printProgress: Math.floor(15 + Math.random() * 70),
-        currentJob: 'peca_producao_' + printerId + '.gcode'
-      });
+    try {
+      if (printer.apiType === 'OCTOPRINT') {
+        const headers: Record<string, string> = printer.apiKey ? { 'X-Api-Key': printer.apiKey } : {};
+        const [pr, job] = await Promise.all([
+          fetch(`${base}/api/printer`, { headers }).then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))),
+          fetch(`${base}/api/job`, { headers }).then(r => r.ok ? r.json() : null).catch(() => null),
+        ]);
+        onUpdatePrinter(printerId, {
+          isOnline: true,
+          nozzleTemp: Math.round(pr?.temperature?.tool0?.actual ?? 0),
+          bedTemp: Math.round(pr?.temperature?.bed?.actual ?? 0),
+          printProgress: Math.round(job?.progress?.completion ?? 0),
+          currentJob: job?.job?.file?.name || '',
+        });
+        alert(`OctoPrint conectado (${pr?.state?.text || 'ok'}).`);
+      } else {
+        // Moonraker / Klipper
+        const headers: Record<string, string> = printer.apiKey ? { 'X-Api-Key': printer.apiKey } : {};
+        const url = `${base}/printer/objects/query?print_stats&extruder&heater_bed&display_status`;
+        const res = await fetch(url, { headers });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const j = await res.json();
+        const s = j?.result?.status ?? {};
+        onUpdatePrinter(printerId, {
+          isOnline: true,
+          nozzleTemp: Math.round(s?.extruder?.temperature ?? 0),
+          bedTemp: Math.round(s?.heater_bed?.temperature ?? 0),
+          printProgress: Math.round((s?.display_status?.progress ?? 0) * 100),
+          currentJob: s?.print_stats?.filename || '',
+        });
+        alert(`Moonraker conectado (${s?.print_stats?.state || 'ok'}).`);
+      }
+    } catch (e: any) {
+      onUpdatePrinter(printerId, { isOnline: false });
+      alert(
+        `Não foi possível conectar em ${base}.\n\nErro: ${e?.message || e}\n\n` +
+        'Checklist Moonraker:\n' +
+        `• A porta padrão é 7125 (Mainsail/Fluidd usam 80). Porta configurada: ${port}\n` +
+        '• No moonraker.conf, em [authorization], inclua o endereço deste site em cors_domains e a sua rede em trusted_clients.\n' +
+        '• O site está em HTTPS e a impressora em HTTP: libere "conteúdo inseguro" para este site no navegador, ou use um túnel HTTPS.\n' +
+        '• Bambu Lab não usa Moonraker — o MQTT dela é 8883, não 9883.'
+      );
+    } finally {
       setIsTestingConnId(null);
-      alert('Conexão estabelecida com sucesso! Telemetria de bocal, mesa e progresso de impressão importadas na hora.');
-    }, 1100);
+    }
+  };
+
+  // Edição completa da impressora
+  const [editPrinter, setEditPrinter] = useState<Partial<Printer> | null>(null);
+  const startEditPrinter = (p: Printer) => {
+    setSelectedPrinterDetails(p);
+    setPIpAddress(p.ipAddress || '');
+    setEditPrinter({ ...p });
   };
 
   // Selected client for details page view
