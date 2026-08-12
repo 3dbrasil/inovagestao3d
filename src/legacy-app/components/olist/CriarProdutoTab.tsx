@@ -89,6 +89,11 @@ export const CriarProdutoTab: React.FC = () => {
     return ((p - c) / p) * 100;
   }, [form.preco, form.precoCusto]);
 
+  const totalGrams = useMemo(
+    () => (filamentLines.length ? filamentLines.reduce((s, l) => s + (Number(l.grams) || 0), 0) : n(form.pesoFilamentoGramas)),
+    [filamentLines, form.pesoFilamentoGramas],
+  );
+
   const onFiles = useCallback(async (files: FileList | null) => {
     if (!files?.length) return;
     const reads = await Promise.all(
@@ -173,15 +178,23 @@ export const CriarProdutoTab: React.FC = () => {
         id: Date.now(),
         name: form.nome,
         description: form.descricao,
-        weightGrams: n(form.pesoFilamentoGramas),
+        weightGrams: totalGrams,
         printTimeHours: n(form.tempoImpressaoHoras),
-        filamentType: form.materialSugerido || 'PLA',
+        filamentType: filamentLines[0]?.type || form.materialSugerido || 'PLA',
         defaultPrice: n(form.preco),
         stockCount: n(form.estoqueInicial),
         minStockCount: n(form.estoqueMinimo),
         productCode: form.sku,
         virtualStockCount: n(form.estoqueInicial),
-        filamentColorsUsed: form.corFilamento || undefined,
+        filamentColorsUsed:
+          filamentLines.map((l) => l.color).filter(Boolean).join(', ') || form.corFilamento || undefined,
+        filamentsUsed: filamentLines
+          .filter((l) => l.filamentStockId > 0 && Number(l.grams) > 0)
+          .map((l) => ({ filamentStockId: l.filamentStockId, weightGrams: Number(l.grams) })),
+        hasSecondaryMaterial: filamentLines.length > 1,
+        secondaryFilamentType: filamentLines[1]?.type,
+        secondaryWeightGrams: filamentLines[1] ? Number(filamentLines[1].grams) : undefined,
+        secondaryFilamentColorsUsed: filamentLines[1]?.color,
         imageUrl: images[0] || undefined,
       };
       list.push(item);
@@ -190,7 +203,7 @@ export const CriarProdutoTab: React.FC = () => {
     } catch {
       /* ignore */
     }
-  }, [form, images]);
+  }, [form, images, filamentLines, totalGrams]);
 
   const enviar = useCallback(async () => {
     setError(null);
@@ -219,6 +232,11 @@ export const CriarProdutoTab: React.FC = () => {
           gtin: form.gtin,
           marca: form.marca,
           categoria: form.categoria,
+          tags: form.tags
+            .split(',')
+            .map((t) => t.trim())
+            .filter(Boolean)
+            .slice(0, 20),
           pesoLiquido: n(form.pesoLiquido),
           pesoBruto: n(form.pesoBruto) || n(form.pesoLiquido),
           largura: n(form.largura),
@@ -233,8 +251,10 @@ export const CriarProdutoTab: React.FC = () => {
           seoKeywords: form.seoKeywords,
           imagens: httpImages,
           },
-        })) as { id: string; flavor: string };
-        olistMsg = `Produto criado na Olist (${res.flavor === 'v3' ? 'API v3' : 'API v2'})${res.id ? ` · ID ${res.id}` : ''}.`;
+        })) as { id: string; flavor: string; warning?: string | null };
+        olistMsg =
+          `Produto criado na Olist (${res.flavor === 'v3' ? 'API v3' : 'API v2'})${res.id ? ` · ID ${res.id}` : ''}.` +
+          (res.warning ? ` ⚠ ${res.warning}` : '');
       }
 
       let siteMsg = '';
@@ -248,7 +268,7 @@ export const CriarProdutoTab: React.FC = () => {
               price: n(form.preco),
               promoPrice: n(form.precoPromocional) || undefined,
               stock: Math.max(1, n(form.estoqueInicial) || 1),
-              weightGrams: n(form.pesoFilamentoGramas) || n(form.pesoLiquido) * 1000 || undefined,
+              weightGrams: totalGrams || n(form.pesoLiquido) * 1000 || undefined,
               image: images[0] || undefined,
               extraImages: images.slice(1, 8),
             },
@@ -261,14 +281,24 @@ export const CriarProdutoTab: React.FC = () => {
       if (alsoLocal) saveLocalCatalog();
       // Estoque inicial => produção real => debita matéria-prima do estoque.
       let debitMsg = '';
-      if (debitStock && n(form.estoqueInicial) > 0 && n(form.pesoFilamentoGramas) > 0) {
-        const r = debitProductionMaterials({
-          units: n(form.estoqueInicial),
-          gramsPerUnit: n(form.pesoFilamentoGramas),
-          filamentType: form.materialSugerido,
-          filamentColor: form.corFilamento,
-        });
-        debitMsg = r.messages.length ? ` ${r.messages.join(' ')}` : '';
+      if (debitStock && n(form.estoqueInicial) > 0) {
+        const linhas = filamentLines.length
+          ? filamentLines
+          : n(form.pesoFilamentoGramas) > 0
+            ? [{ filamentStockId: 0, type: form.materialSugerido, color: form.corFilamento, grams: n(form.pesoFilamentoGramas) }]
+            : [];
+        const msgs: string[] = [];
+        for (const l of linhas) {
+          if (!(Number(l.grams) > 0)) continue;
+          const r = debitProductionMaterials({
+            units: n(form.estoqueInicial),
+            gramsPerUnit: Number(l.grams),
+            filamentType: l.type,
+            filamentColor: l.color,
+          });
+          msgs.push(...r.messages);
+        }
+        debitMsg = msgs.length ? ` ${msgs.join(' ')}` : '';
       }
       setMsg(
         olistMsg +
@@ -281,6 +311,7 @@ export const CriarProdutoTab: React.FC = () => {
       );
       setForm(EMPTY);
       setImages([]);
+      setFilamentLines([]);
       setIdeia('');
       setContexto('');
     } catch (e: any) {
@@ -288,7 +319,7 @@ export const CriarProdutoTab: React.FC = () => {
     } finally {
       setSending(false);
     }
-  }, [form, images, alsoLocal, alsoOlist, alsoSite, debitStock, saveLocalCatalog]);
+  }, [form, images, filamentLines, totalGrams, alsoLocal, alsoOlist, alsoSite, debitStock, saveLocalCatalog]);
 
   return (
     <div className="space-y-5">
@@ -377,6 +408,15 @@ export const CriarProdutoTab: React.FC = () => {
               weightGrams: n(form.pesoFilamentoGramas),
               hours: n(form.tempoImpressaoHoras),
               material: form.materialSugerido || 'PLA',
+            }}
+            lines={filamentLines}
+            onLinesChange={(l) => {
+              setFilamentLines(l);
+              const total = l.reduce((s, x) => s + (Number(x.grams) || 0), 0);
+              if (total > 0) set('pesoFilamentoGramas', String(total));
+              if (l[0]?.type) set('materialSugerido', l[0].type);
+              const cores = l.map((x) => x.color).filter(Boolean).join(', ');
+              if (cores) set('corFilamento', cores);
             }}
             onUsePrice={(p) => set('preco', String(p))}
           />
