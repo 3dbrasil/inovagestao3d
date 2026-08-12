@@ -15,6 +15,7 @@ export interface NewOlistProduct {
   gtin?: string;
   marca?: string;
   categoria?: string;
+  tags?: string[];
   pesoLiquido?: number; // kg
   pesoBruto?: number; // kg
   largura?: number; // cm
@@ -33,7 +34,33 @@ export interface NewOlistProduct {
 const V3_BASE = 'https://api.tiny.com.br/public-api/v3';
 const V2_BASE = 'https://api.tiny.com.br/api2';
 
+async function postV3(token: string, body: Record<string, unknown>) {
+  const res = await fetch(`${V3_BASE}/produtos`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  const text = await res.text();
+  let json: any = null;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    /* noop */
+  }
+  const detail =
+    json?.mensagem ||
+    json?.message ||
+    (Array.isArray(json?.erros) ? json.erros.map((e: any) => e?.mensagem || e).join(' · ') : '') ||
+    text.slice(0, 300);
+  return { ok: res.ok, status: res.status, json, detail };
+}
+
 async function createV3(token: string, p: NewOlistProduct) {
+  const tags = (p.tags || []).map((t) => t.trim()).filter(Boolean);
   const body: Record<string, unknown> = {
     sku: p.sku,
     descricao: p.nome,
@@ -68,42 +95,43 @@ async function createV3(token: string, p: NewOlistProduct) {
     seo: {
       titulo: p.seoTitle || p.nome,
       descricao: p.seoDescription || p.descricao || '',
-      keywords: (p.seoKeywords || '')
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean),
+      keywords: Array.from(
+        new Set([
+          ...(p.seoKeywords || '')
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean),
+          ...tags,
+        ]),
+      ),
     },
     anexos: (p.imagens || []).filter(Boolean).map((url) => ({ url })),
   };
+  // Categoria: a Olist/Tiny cria a árvore a partir do caminho completo.
+  if (p.categoria?.trim()) {
+    body['categoria'] = { caminhoCompleto: p.categoria.trim() };
+  }
+  if (tags.length) body['tags'] = tags.map((t) => ({ nome: t }));
 
-  const res = await fetch(`${V3_BASE}/produtos`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
-    body: JSON.stringify(body),
-  });
-  const text = await res.text();
-  let json: any = null;
-  try {
-    json = text ? JSON.parse(text) : null;
-  } catch {
-    /* noop */
+  let warning: string | null = null;
+  let r = await postV3(token, body);
+  if (!r.ok && (body['categoria'] || body['tags'])) {
+    // Alguns tenants recusam categoria/tags no POST: cria sem eles e avisa.
+    const fallback = { ...body };
+    delete fallback['categoria'];
+    delete fallback['tags'];
+    const r2 = await postV3(token, fallback);
+    if (r2.ok) {
+      warning = `Produto criado, mas a Olist recusou categoria/tags (${r.detail || `HTTP ${r.status}`}). Ajuste a categoria no painel da Olist.`;
+      r = r2;
+    }
   }
-  if (!res.ok) {
-    const detail =
-      json?.mensagem ||
-      json?.message ||
-      (Array.isArray(json?.erros) ? json.erros.map((e: any) => e?.mensagem || e).join(' · ') : '') ||
-      text.slice(0, 300);
-    throw new Error(`Olist recusou o produto (HTTP ${res.status}): ${detail || 'sem detalhe'}`);
-  }
-  return { id: String(json?.id ?? ''), flavor: 'v3' as const };
+  if (!r.ok) throw new Error(`Olist recusou o produto (HTTP ${r.status}): ${r.detail || 'sem detalhe'}`);
+  return { id: String(r.json?.id ?? ''), flavor: 'v3' as const, warning };
 }
 
 async function createV2(token: string, p: NewOlistProduct) {
+  const tags = (p.tags || []).map((t) => t.trim()).filter(Boolean);
   const produto: Record<string, unknown> = {
     sequencia: 1,
     codigo: p.sku,
@@ -130,7 +158,11 @@ async function createV2(token: string, p: NewOlistProduct) {
     comprimento_embalagem: p.profundidade ?? 0,
     seo_title: p.seoTitle || p.nome,
     seo_description: p.seoDescription || p.descricao || '',
-    seo_keywords: p.seoKeywords || '',
+    seo_keywords: Array.from(
+      new Set([...(p.seoKeywords || '').split(',').map((s) => s.trim()).filter(Boolean), ...tags]),
+    ).join(', '),
+    categoria: p.categoria?.trim() || '',
+    ...(tags.length ? { tags: tags.map((t) => ({ tag: t })) } : {}),
     anexos: (p.imagens || []).filter(Boolean).map((url) => ({ anexo: url })),
   };
 
@@ -163,7 +195,7 @@ async function createV2(token: string, p: NewOlistProduct) {
     throw new Error(`Olist recusou o produto: ${erro || 'sem detalhe'}`);
   }
   const id = retorno?.registros?.[0]?.registro?.id;
-  return { id: String(id ?? ''), flavor: 'v2' as const };
+  return { id: String(id ?? ''), flavor: 'v2' as const, warning: null as string | null };
 }
 
 export async function createOlistProduct(token: string, p: NewOlistProduct) {
