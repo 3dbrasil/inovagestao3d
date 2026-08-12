@@ -4,7 +4,7 @@ import {
 } from 'lucide-react';
 import { aiProductDraft, olistCreateProduct } from '@/lib/olist.functions';
 import { inovaCreateProduct } from '@/lib/inovastudio.functions';
-import { PriceCalculator } from './PriceCalculator';
+import { PriceCalculator, type FilamentLine } from './PriceCalculator';
 import { safeStorage } from '../../utils/storage';
 import { debitProductionMaterials } from '../../utils/stockDebit';
 import type { CatalogItem } from '../../types';
@@ -19,7 +19,7 @@ type Form = {
   estoqueInicial: string; estoqueMinimo: string; garantia: string; observacoes: string;
   seoTitle: string; seoDescription: string; seoKeywords: string;
   tempoImpressaoHoras: string; pesoFilamentoGramas: string; materialSugerido: string;
-  corFilamento: string;
+  corFilamento: string; tags: string; categoriaMercadoLivre: string; categoriaShopee: string;
 };
 
 const EMPTY: Form = {
@@ -30,7 +30,7 @@ const EMPTY: Form = {
   estoqueInicial: '1', estoqueMinimo: '1', garantia: '90 dias', observacoes: '',
   seoTitle: '', seoDescription: '', seoKeywords: '',
   tempoImpressaoHoras: '', pesoFilamentoGramas: '', materialSugerido: 'PLA',
-  corFilamento: '',
+  corFilamento: '', tags: '', categoriaMercadoLivre: '', categoriaShopee: '',
 };
 
 const n = (v: string) => {
@@ -67,6 +67,7 @@ const Field: React.FC<{
 export const CriarProdutoTab: React.FC = () => {
   const [form, setForm] = useState<Form>(EMPTY);
   const [images, setImages] = useState<string[]>([]);
+  const [filamentLines, setFilamentLines] = useState<FilamentLine[]>([]);
   const [ideia, setIdeia] = useState('');
   const [contexto, setContexto] = useState('');
   const [generating, setGenerating] = useState(false);
@@ -87,6 +88,11 @@ export const CriarProdutoTab: React.FC = () => {
     if (!p) return 0;
     return ((p - c) / p) * 100;
   }, [form.preco, form.precoCusto]);
+
+  const totalGrams = useMemo(
+    () => (filamentLines.length ? filamentLines.reduce((s, l) => s + (Number(l.grams) || 0), 0) : n(form.pesoFilamentoGramas)),
+    [filamentLines, form.pesoFilamentoGramas],
+  );
 
   const onFiles = useCallback(async (files: FileList | null) => {
     if (!files?.length) return;
@@ -152,6 +158,9 @@ export const CriarProdutoTab: React.FC = () => {
         tempoImpressaoHoras: s(d.tempoImpressaoHoras, f.tempoImpressaoHoras),
         pesoFilamentoGramas: s(d.pesoFilamentoGramas, f.pesoFilamentoGramas),
         materialSugerido: s(d.materialSugerido, f.materialSugerido),
+        tags: Array.isArray(d.tags) ? d.tags.join(', ') : s(d.tags, f.tags),
+        categoriaMercadoLivre: s(d.categoriaMercadoLivre, f.categoriaMercadoLivre),
+        categoriaShopee: s(d.categoriaShopee, f.categoriaShopee),
       }));
       setMsg('Cadastro preenchido pela IA. Revise os campos e envie para a Olist.');
     } catch (e: any) {
@@ -169,15 +178,23 @@ export const CriarProdutoTab: React.FC = () => {
         id: Date.now(),
         name: form.nome,
         description: form.descricao,
-        weightGrams: n(form.pesoFilamentoGramas),
+        weightGrams: totalGrams,
         printTimeHours: n(form.tempoImpressaoHoras),
-        filamentType: form.materialSugerido || 'PLA',
+        filamentType: filamentLines[0]?.type || form.materialSugerido || 'PLA',
         defaultPrice: n(form.preco),
         stockCount: n(form.estoqueInicial),
         minStockCount: n(form.estoqueMinimo),
         productCode: form.sku,
         virtualStockCount: n(form.estoqueInicial),
-        filamentColorsUsed: form.corFilamento || undefined,
+        filamentColorsUsed:
+          filamentLines.map((l) => l.color).filter(Boolean).join(', ') || form.corFilamento || undefined,
+        filamentsUsed: filamentLines
+          .filter((l) => l.filamentStockId > 0 && Number(l.grams) > 0)
+          .map((l) => ({ filamentStockId: l.filamentStockId, weightGrams: Number(l.grams) })),
+        hasSecondaryMaterial: filamentLines.length > 1,
+        secondaryFilamentType: filamentLines[1]?.type,
+        secondaryWeightGrams: filamentLines[1] ? Number(filamentLines[1].grams) : undefined,
+        secondaryFilamentColorsUsed: filamentLines[1]?.color,
         imageUrl: images[0] || undefined,
       };
       list.push(item);
@@ -186,7 +203,7 @@ export const CriarProdutoTab: React.FC = () => {
     } catch {
       /* ignore */
     }
-  }, [form, images]);
+  }, [form, images, filamentLines, totalGrams]);
 
   const enviar = useCallback(async () => {
     setError(null);
@@ -215,6 +232,11 @@ export const CriarProdutoTab: React.FC = () => {
           gtin: form.gtin,
           marca: form.marca,
           categoria: form.categoria,
+          tags: form.tags
+            .split(',')
+            .map((t) => t.trim())
+            .filter(Boolean)
+            .slice(0, 20),
           pesoLiquido: n(form.pesoLiquido),
           pesoBruto: n(form.pesoBruto) || n(form.pesoLiquido),
           largura: n(form.largura),
@@ -223,14 +245,22 @@ export const CriarProdutoTab: React.FC = () => {
           estoqueInicial: n(form.estoqueInicial),
           estoqueMinimo: n(form.estoqueMinimo),
           garantia: form.garantia,
-          observacoes: form.observacoes,
+          observacoes: [
+            form.observacoes,
+            form.categoriaMercadoLivre ? `Categoria ML: ${form.categoriaMercadoLivre}` : '',
+            form.categoriaShopee ? `Categoria Shopee: ${form.categoriaShopee}` : '',
+          ]
+            .filter(Boolean)
+            .join(' | '),
           seoTitle: form.seoTitle,
           seoDescription: form.seoDescription,
           seoKeywords: form.seoKeywords,
           imagens: httpImages,
           },
-        })) as { id: string; flavor: string };
-        olistMsg = `Produto criado na Olist (${res.flavor === 'v3' ? 'API v3' : 'API v2'})${res.id ? ` · ID ${res.id}` : ''}.`;
+        })) as { id: string; flavor: string; warning?: string | null };
+        olistMsg =
+          `Produto criado na Olist (${res.flavor === 'v3' ? 'API v3' : 'API v2'})${res.id ? ` · ID ${res.id}` : ''}.` +
+          (res.warning ? ` ⚠ ${res.warning}` : '');
       }
 
       let siteMsg = '';
@@ -244,7 +274,7 @@ export const CriarProdutoTab: React.FC = () => {
               price: n(form.preco),
               promoPrice: n(form.precoPromocional) || undefined,
               stock: Math.max(1, n(form.estoqueInicial) || 1),
-              weightGrams: n(form.pesoFilamentoGramas) || n(form.pesoLiquido) * 1000 || undefined,
+              weightGrams: totalGrams || n(form.pesoLiquido) * 1000 || undefined,
               image: images[0] || undefined,
               extraImages: images.slice(1, 8),
             },
@@ -257,14 +287,24 @@ export const CriarProdutoTab: React.FC = () => {
       if (alsoLocal) saveLocalCatalog();
       // Estoque inicial => produção real => debita matéria-prima do estoque.
       let debitMsg = '';
-      if (debitStock && n(form.estoqueInicial) > 0 && n(form.pesoFilamentoGramas) > 0) {
-        const r = debitProductionMaterials({
-          units: n(form.estoqueInicial),
-          gramsPerUnit: n(form.pesoFilamentoGramas),
-          filamentType: form.materialSugerido,
-          filamentColor: form.corFilamento,
-        });
-        debitMsg = r.messages.length ? ` ${r.messages.join(' ')}` : '';
+      if (debitStock && n(form.estoqueInicial) > 0) {
+        const linhas = filamentLines.length
+          ? filamentLines
+          : n(form.pesoFilamentoGramas) > 0
+            ? [{ filamentStockId: 0, type: form.materialSugerido, color: form.corFilamento, grams: n(form.pesoFilamentoGramas) }]
+            : [];
+        const msgs: string[] = [];
+        for (const l of linhas) {
+          if (!(Number(l.grams) > 0)) continue;
+          const r = debitProductionMaterials({
+            units: n(form.estoqueInicial),
+            gramsPerUnit: Number(l.grams),
+            filamentType: l.type,
+            filamentColor: l.color,
+          });
+          msgs.push(...r.messages);
+        }
+        debitMsg = msgs.length ? ` ${msgs.join(' ')}` : '';
       }
       setMsg(
         olistMsg +
@@ -277,6 +317,7 @@ export const CriarProdutoTab: React.FC = () => {
       );
       setForm(EMPTY);
       setImages([]);
+      setFilamentLines([]);
       setIdeia('');
       setContexto('');
     } catch (e: any) {
@@ -284,7 +325,7 @@ export const CriarProdutoTab: React.FC = () => {
     } finally {
       setSending(false);
     }
-  }, [form, images, alsoLocal, alsoOlist, alsoSite, debitStock, saveLocalCatalog]);
+  }, [form, images, filamentLines, totalGrams, alsoLocal, alsoOlist, alsoSite, debitStock, saveLocalCatalog]);
 
   return (
     <div className="space-y-5">
@@ -374,6 +415,15 @@ export const CriarProdutoTab: React.FC = () => {
               hours: n(form.tempoImpressaoHoras),
               material: form.materialSugerido || 'PLA',
             }}
+            lines={filamentLines}
+            onLinesChange={(l) => {
+              setFilamentLines(l);
+              const total = l.reduce((s, x) => s + (Number(x.grams) || 0), 0);
+              if (total > 0) set('pesoFilamentoGramas', String(total));
+              if (l[0]?.type) set('materialSugerido', l[0].type);
+              const cores = l.map((x) => x.color).filter(Boolean).join(', ');
+              if (cores) set('corFilamento', cores);
+            }}
             onUsePrice={(p) => set('preco', String(p))}
           />
         </div>
@@ -413,7 +463,35 @@ export const CriarProdutoTab: React.FC = () => {
             <Field label="Comprimento (cm)" value={form.profundidade} onChange={(v) => set('profundidade', v)} />
             <Field label="Estoque inicial" value={form.estoqueInicial} onChange={(v) => set('estoqueInicial', v)} />
             <Field label="Estoque mínimo" value={form.estoqueMinimo} onChange={(v) => set('estoqueMinimo', v)} />
-            <Field label="Categoria" value={form.categoria} onChange={(v) => set('categoria', v)} />
+            <Field
+              label="Categoria Olist (caminho)"
+              value={form.categoria}
+              onChange={(v) => set('categoria', v)}
+              placeholder="Casa > Organização > Suportes"
+              hint="Caminho completo — a Olist cria a árvore e mapeia nos marketplaces"
+            />
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Field
+              label="Categoria Mercado Livre"
+              value={form.categoriaMercadoLivre}
+              onChange={(v) => set('categoriaMercadoLivre', v)}
+              placeholder="Casa, Móveis e Decoração > ..."
+            />
+            <Field
+              label="Categoria Shopee"
+              value={form.categoriaShopee}
+              onChange={(v) => set('categoriaShopee', v)}
+              placeholder="Casa e Decoração > ..."
+            />
+            <Field
+              label="Tags (separadas por vírgula)"
+              value={form.tags}
+              onChange={(v) => set('tags', v)}
+              placeholder="suporte, impressão 3d, gamer"
+              hint="Vão para a Olist e reforçam as keywords"
+            />
           </div>
 
           <div className="grid gap-3 sm:grid-cols-3">

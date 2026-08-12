@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Calculator, ArrowRight } from 'lucide-react';
+import { Calculator, ArrowRight, Plus, X, Layers } from 'lucide-react';
 import { safeStorage } from '../../utils/storage';
 import type { FilamentStock, SupplyStock } from '../../types';
 
@@ -45,14 +45,25 @@ export interface CalcInputs {
   material: string;
 }
 
+export interface FilamentLine {
+  /** id do carretel no estoque (0 = manual) */
+  filamentStockId: number;
+  type: string;
+  color: string;
+  grams: number;
+}
+
 /**
  * Mesma calculadora do cadastro de produtos (Custos & Margem):
  * material + energia + mão de obra + insumos + markup + taxas/impostos.
+ * Suporta multimaterial: várias linhas de filamento (tipo + cor + gramas).
  */
 export const PriceCalculator: React.FC<{
   inputs: CalcInputs;
   onUsePrice: (price: number) => void;
-}> = ({ inputs, onUsePrice }) => {
+  lines: FilamentLine[];
+  onLinesChange: (lines: FilamentLine[]) => void;
+}> = ({ inputs, onUsePrice, lines, onLinesChange }) => {
   const [filaments, setFilaments] = useState<FilamentStock[]>([]);
   const [supplies, setSupplies] = useState<SupplyStock[]>([]);
   const [supplyIds, setSupplyIds] = useState<number[]>([]);
@@ -79,15 +90,26 @@ export const PriceCalculator: React.FC<{
     return () => window.removeEventListener('bambuzau_stock_updated', load);
   }, []);
 
-  const breakdown = useMemo(() => {
-    const matching = filaments.filter(
-      (f) => String(f.type || '').toUpperCase() === String(inputs.material || '').toUpperCase() && num(f.priceRoll) > 0,
+  const priceOf = (line: FilamentLine) => {
+    const spool = filaments.find((f) => Number(f.id) === Number(line.filamentStockId));
+    if (spool && num(spool.priceRoll) > 0) return num(spool.priceRoll);
+    const sameType = filaments.filter(
+      (f) => String(f.type || '').toUpperCase() === String(line.type || '').toUpperCase() && num(f.priceRoll) > 0,
     );
-    const priceKg = matching.length
-      ? matching.reduce((s, f) => s + num(f.priceRoll), 0) / matching.length
-      : 120;
-    const grams = inputs.weightGrams * (1 + num(lossPct) / 100);
-    const material = (grams / 1000) * priceKg;
+    return sameType.length ? sameType.reduce((s, f) => s + num(f.priceRoll), 0) / sameType.length : 120;
+  };
+
+  const setLine = (i: number, patch: Partial<FilamentLine>) =>
+    onLinesChange(lines.map((l, k) => (k === i ? { ...l, ...patch } : l)));
+
+  const breakdown = useMemo(() => {
+    const loss = 1 + num(lossPct) / 100;
+    const active = lines.length
+      ? lines
+      : [{ filamentStockId: 0, type: inputs.material || 'PLA', color: '', grams: inputs.weightGrams }];
+    const totalGrams = active.reduce((s, l) => s + num(l.grams), 0);
+    const material = active.reduce((s, l) => s + ((num(l.grams) * loss) / 1000) * priceOf(l), 0);
+    const priceKg = totalGrams > 0 ? (material / ((totalGrams * loss) / 1000)) : priceOf(active[0]);
     const energy = (num(printerW) / 1000) * inputs.hours * num(energyKwh);
     const labor = inputs.hours * num(laborHour);
     const supplyCost = supplyIds.reduce((s, id) => {
@@ -98,8 +120,8 @@ export const PriceCalculator: React.FC<{
     const deduction = Math.min(0.95, (num(percentFee) + num(taxPct)) / 100);
     const base = direct * (1 + num(margin) / 100) + num(fixedFee);
     const suggested = deduction >= 0.95 ? base : base / (1 - deduction);
-    return { priceKg, material, energy, labor, supplyCost, direct, suggested: Number.isFinite(suggested) ? suggested : 0 };
-  }, [filaments, supplies, supplyIds, inputs, lossPct, laborHour, printerW, energyKwh, packaging, shipping, hardware, margin, fixedFee, percentFee, taxPct]);
+    return { priceKg, totalGrams, material, energy, labor, supplyCost, direct, suggested: Number.isFinite(suggested) ? suggested : 0 };
+  }, [filaments, supplies, supplyIds, lines, inputs, lossPct, laborHour, printerW, energyKwh, packaging, shipping, hardware, margin, fixedFee, percentFee, taxPct]);
 
   return (
     <div className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.02] p-4">
@@ -107,8 +129,68 @@ export const PriceCalculator: React.FC<{
         <Calculator className="h-4 w-4 text-[#b7ff00]" /> Calculadora de preço
       </h3>
       <p className="text-[10px] text-white/35">
-        Usa {inputs.weightGrams || 0}g de {inputs.material || 'PLA'} e {inputs.hours || 0}h de impressão do formulário ao lado.
+        {breakdown.totalGrams.toFixed(0)}g no total · {inputs.hours || 0}h de impressão.
       </p>
+
+      {/* Filamentos / multimaterial */}
+      <div className="space-y-2 rounded-xl border border-white/10 bg-black/20 p-2.5">
+        <div className="flex items-center justify-between">
+          <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-white/50">
+            <Layers className="h-3 w-3 text-[#b7ff00]" /> Filamentos (multimaterial)
+          </span>
+          <button
+            onClick={() => {
+              const first = filaments[0];
+              onLinesChange([
+                ...lines,
+                {
+                  filamentStockId: first ? Number(first.id) : 0,
+                  type: first?.type || inputs.material || 'PLA',
+                  color: first?.color || '',
+                  grams: 0,
+                },
+              ]);
+            }}
+            className="flex items-center gap-1 rounded-lg border border-[#b7ff00]/40 px-2 py-0.5 text-[10px] font-black text-[#b7ff00] hover:bg-[#b7ff00]/10"
+          >
+            <Plus className="h-3 w-3" /> Cor / material
+          </button>
+        </div>
+
+        {!lines.length && (
+          <p className="text-[10px] text-white/35">Nenhum filamento escolhido — usando {inputs.material || 'PLA'} genérico.</p>
+        )}
+
+        {lines.map((l, i) => (
+          <div key={i} className="grid grid-cols-[1fr_64px_20px] items-center gap-1.5">
+            <select
+              value={String(l.filamentStockId || 0)}
+              onChange={(e) => {
+                const id = Number(e.target.value);
+                const sp = filaments.find((f) => Number(f.id) === id);
+                setLine(i, sp ? { filamentStockId: id, type: sp.type, color: sp.color } : { filamentStockId: 0 });
+              }}
+              className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1.5 text-[11px] text-white outline-none focus:border-[#b7ff00]/50"
+            >
+              <option value="0">Manual — {l.type || 'PLA'}</option>
+              {filaments.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.type} · {f.color} · {Math.round(num(f.stockGrams))}g · {money(num(f.priceRoll))}/kg
+                </option>
+              ))}
+            </select>
+            <input
+              value={String(l.grams ?? '')}
+              onChange={(e) => setLine(i, { grams: num(e.target.value) })}
+              placeholder="g"
+              className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1.5 text-[11px] text-white outline-none focus:border-[#b7ff00]/50"
+            />
+            <button onClick={() => onLinesChange(lines.filter((_, k) => k !== i))} className="text-white/35 hover:text-red-400">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ))}
+      </div>
 
       <div className="grid grid-cols-2 gap-2">
         <In label="Perda (%)" value={lossPct} onChange={setLossPct} />
@@ -148,7 +230,7 @@ export const PriceCalculator: React.FC<{
       )}
 
       <div className="space-y-1 rounded-xl border border-white/10 bg-black/30 p-3 text-[11px] text-white/55">
-        <div className="flex justify-between"><span>Filamento ({money(breakdown.priceKg)}/kg)</span><strong>{money(breakdown.material)}</strong></div>
+        <div className="flex justify-between"><span>Filamento ({money(breakdown.priceKg)}/kg médio)</span><strong>{money(breakdown.material)}</strong></div>
         <div className="flex justify-between"><span>Energia</span><strong>{money(breakdown.energy)}</strong></div>
         <div className="flex justify-between"><span>Mão de obra</span><strong>{money(breakdown.labor)}</strong></div>
         <div className="flex justify-between"><span>Insumos</span><strong>{money(breakdown.supplyCost)}</strong></div>

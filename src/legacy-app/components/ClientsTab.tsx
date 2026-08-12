@@ -180,19 +180,77 @@ export const ClientsTab: React.FC<ClientsTabProps> = ({
     alert('Nova impressora cadastrada com sucesso!');
   };
 
-  const handleTestPrinterConnection = (printerId: number) => {
+  /** Conexão real: Moonraker (Klipper) e OctoPrint via HTTP. */
+  const handleTestPrinterConnection = async (printerId: number) => {
+    const printer = printers.find(p => p.id === printerId);
+    if (!printer) return;
+    const host = (printer.ipAddress || '').trim().replace(/^https?:\/\//, '').replace(/\/$/, '');
+    if (!host) { alert('Preencha o IP local da impressora primeiro.'); return; }
+
+    if (printer.apiType === 'BAMBU_CLOUD') {
+      alert(
+        'Bambu Lab usa MQTT na porta 8883 (não existe 9883) e o navegador não consegue abrir MQTT/TLS direto.\n\n' +
+        'Use o modo LAN com Moonraker/OctoPrint, ou registre a máquina como manual e acompanhe pelo Bambu Studio.'
+      );
+      return;
+    }
+
+    const port = (printer.port || (printer.apiType === 'OCTOPRINT' ? '80' : '7125')).trim();
+    const base = `http://${host}${port && port !== '80' ? `:${port}` : ''}`;
     setIsTestingConnId(printerId);
-    setTimeout(() => {
-      onUpdatePrinter(printerId, {
-        isOnline: true,
-        nozzleTemp: Math.floor(190 + Math.random() * 40),
-        bedTemp: Math.floor(50 + Math.random() * 20),
-        printProgress: Math.floor(15 + Math.random() * 70),
-        currentJob: 'peca_producao_' + printerId + '.gcode'
-      });
+    try {
+      if (printer.apiType === 'OCTOPRINT') {
+        const headers: Record<string, string> = printer.apiKey ? { 'X-Api-Key': printer.apiKey } : {};
+        const [pr, job] = await Promise.all([
+          fetch(`${base}/api/printer`, { headers }).then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))),
+          fetch(`${base}/api/job`, { headers }).then(r => r.ok ? r.json() : null).catch(() => null),
+        ]);
+        onUpdatePrinter(printerId, {
+          isOnline: true,
+          nozzleTemp: Math.round(pr?.temperature?.tool0?.actual ?? 0),
+          bedTemp: Math.round(pr?.temperature?.bed?.actual ?? 0),
+          printProgress: Math.round(job?.progress?.completion ?? 0),
+          currentJob: job?.job?.file?.name || '',
+        });
+        alert(`OctoPrint conectado (${pr?.state?.text || 'ok'}).`);
+      } else {
+        // Moonraker / Klipper
+        const headers: Record<string, string> = printer.apiKey ? { 'X-Api-Key': printer.apiKey } : {};
+        const url = `${base}/printer/objects/query?print_stats&extruder&heater_bed&display_status`;
+        const res = await fetch(url, { headers });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const j = await res.json();
+        const s = j?.result?.status ?? {};
+        onUpdatePrinter(printerId, {
+          isOnline: true,
+          nozzleTemp: Math.round(s?.extruder?.temperature ?? 0),
+          bedTemp: Math.round(s?.heater_bed?.temperature ?? 0),
+          printProgress: Math.round((s?.display_status?.progress ?? 0) * 100),
+          currentJob: s?.print_stats?.filename || '',
+        });
+        alert(`Moonraker conectado (${s?.print_stats?.state || 'ok'}).`);
+      }
+    } catch (e: any) {
+      onUpdatePrinter(printerId, { isOnline: false });
+      alert(
+        `Não foi possível conectar em ${base}.\n\nErro: ${e?.message || e}\n\n` +
+        'Checklist Moonraker:\n' +
+        `• A porta padrão é 7125 (Mainsail/Fluidd usam 80). Porta configurada: ${port}\n` +
+        '• No moonraker.conf, em [authorization], inclua o endereço deste site em cors_domains e a sua rede em trusted_clients.\n' +
+        '• O site está em HTTPS e a impressora em HTTP: libere "conteúdo inseguro" para este site no navegador, ou use um túnel HTTPS.\n' +
+        '• Bambu Lab não usa Moonraker — o MQTT dela é 8883, não 9883.'
+      );
+    } finally {
       setIsTestingConnId(null);
-      alert('Conexão estabelecida com sucesso! Telemetria de bocal, mesa e progresso de impressão importadas na hora.');
-    }, 1100);
+    }
+  };
+
+  // Edição completa da impressora
+  const [editPrinter, setEditPrinter] = useState<Partial<Printer> | null>(null);
+  const startEditPrinter = (p: Printer) => {
+    setSelectedPrinterDetails(p);
+    setPIpAddress(p.ipAddress || '');
+    setEditPrinter({ ...p });
   };
 
   // Selected client for details page view
@@ -481,13 +539,17 @@ export const ClientsTab: React.FC<ClientsTabProps> = ({
                   <label className="text-[10px] text-[#8BA58D] font-bold uppercase">Interface / Protocolo de Rede</label>
                   <select
                     value={newPrinterApiType}
-                    onChange={(e) => setNewPrinterApiType(e.target.value as any)}
+                    onChange={(e) => {
+                      const t = e.target.value as any;
+                      setNewPrinterApiType(t);
+                      setNewPrinterPort(t === 'OCTOPRINT' ? '80' : t === 'BAMBU_CLOUD' ? '8883' : '7125');
+                    }}
                     className="bg-[#151917] border border-[#232B27] rounded-lg px-2.5 py-1.5 text-xs text-[#F1F4EE] outline-none cursor-pointer"
                   >
                     <option value="NONE">Manual (Sem Telemetria Online)</option>
-                    <option value="KLIPPER">Klipper (API Moonraker)</option>
-                    <option value="OCTOPRINT">OctoPrint API (Marlin / GRBL)</option>
-                    <option value="BAMBU_CLOUD">Bambu Lab Integration Code</option>
+                    <option value="KLIPPER">Klipper / Moonraker (porta 7125)</option>
+                    <option value="OCTOPRINT">OctoPrint API (porta 80)</option>
+                    <option value="BAMBU_CLOUD">Bambu Lab (MQTT 8883 — LAN/Studio)</option>
                   </select>
                 </div>
               </div>
@@ -614,6 +676,30 @@ export const ClientsTab: React.FC<ClientsTabProps> = ({
                   }`}
                   id={`printer_grid_card_${printer.id}`}
                 >
+                  <div className="absolute right-1.5 top-1.5 z-10 flex gap-1 opacity-70 transition group-hover:opacity-100">
+                    <button
+                      type="button"
+                      title="Editar impressora"
+                      onClick={(e) => { e.stopPropagation(); startEditPrinter(printer); }}
+                      className="rounded-md border border-amber-500/30 bg-black/70 p-1 text-amber-400 hover:bg-amber-500/20"
+                    >
+                      <Edit3 className="h-3 w-3" />
+                    </button>
+                    <button
+                      type="button"
+                      title="Excluir impressora"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm(`Excluir a impressora "${printer.name}"? Esta ação não pode ser desfeita.`)) {
+                          onDeletePrinter(printer.id);
+                          if (selectedPrinterDetails?.id === printer.id) setSelectedPrinterDetails(null);
+                        }
+                      }}
+                      className="rounded-md border border-red-500/30 bg-black/70 p-1 text-red-400 hover:bg-red-500/20"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
                   <div className="relative w-20 h-20 rounded-lg overflow-hidden shrink-0 bg-black/40">
                     <img
                       src={imageUrl}
@@ -672,14 +758,106 @@ export const ClientsTab: React.FC<ClientsTabProps> = ({
                     </h4>
                     <p className="text-[9px] text-[#8BA58D] font-mono mt-0.5">Painel de Instalação &amp; Manutenção Física</p>
                   </div>
-                  <button 
-                    onClick={() => setSelectedPrinterDetails(null)}
-                    type="button"
-                    className="text-[10px] text-red-400 hover:text-red-300 font-bold px-2 py-1 hover:bg-red-500/10 rounded-lg transition shrink-0"
-                  >
-                    Fechar Painel ✕
-                  </button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setEditPrinter(editPrinter ? null : { ...printer })}
+                      className="text-[10px] text-amber-400 hover:text-amber-300 font-bold px-2 py-1 hover:bg-amber-500/10 rounded-lg transition flex items-center gap-1"
+                    >
+                      <Edit3 className="h-3 w-3" /> {editPrinter ? 'Cancelar edição' : 'Editar'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm(`Excluir a impressora "${printer.name}"?`)) {
+                          onDeletePrinter(printer.id);
+                          setSelectedPrinterDetails(null);
+                          setEditPrinter(null);
+                        }
+                      }}
+                      className="text-[10px] text-red-400 hover:text-red-300 font-bold px-2 py-1 hover:bg-red-500/10 rounded-lg transition flex items-center gap-1"
+                    >
+                      <Trash2 className="h-3 w-3" /> Excluir
+                    </button>
+                    <button
+                      onClick={() => { setSelectedPrinterDetails(null); setEditPrinter(null); }}
+                      type="button"
+                      className="text-[10px] text-zinc-400 hover:text-white font-bold px-2 py-1 hover:bg-white/5 rounded-lg transition"
+                    >
+                      Fechar ✕
+                    </button>
+                  </div>
                 </div>
+
+                {editPrinter && (
+                  <div className="p-3 bg-[#111613] rounded-xl border border-amber-500/25 space-y-2.5">
+                    <span className="text-[9.5px] text-amber-400 font-mono uppercase font-black">Editar cadastro da máquina</span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      {([
+                        ['name', 'Apelido'],
+                        ['model', 'Modelo'],
+                        ['ipAddress', 'IP / DNS local'],
+                        ['port', 'Porta (Moonraker 7125 · OctoPrint 80)'],
+                      ] as const).map(([k, label]) => (
+                        <div key={k} className="flex flex-col gap-1">
+                          <label className="text-[9px] text-[#8BA58D] font-mono uppercase">{label}</label>
+                          <input
+                            value={String((editPrinter as any)[k] ?? '')}
+                            onChange={(e) => setEditPrinter({ ...editPrinter, [k]: e.target.value })}
+                            className="bg-[#151917] border border-[#232B27] focus:border-amber-500 rounded-lg px-2.5 py-1 text-xs text-[#F1F4EE] outline-none font-mono"
+                          />
+                        </div>
+                      ))}
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[9px] text-[#8BA58D] font-mono uppercase">Interface</label>
+                        <select
+                          value={editPrinter.apiType || 'NONE'}
+                          onChange={(e) => {
+                            const t = e.target.value as Printer['apiType'];
+                            setEditPrinter({
+                              ...editPrinter,
+                              apiType: t,
+                              port: t === 'OCTOPRINT' ? '80' : t === 'KLIPPER' ? '7125' : t === 'BAMBU_CLOUD' ? '8883' : editPrinter.port,
+                            });
+                          }}
+                          className="bg-[#151917] border border-[#232B27] rounded-lg px-2.5 py-1 text-xs text-[#F1F4EE] outline-none cursor-pointer"
+                        >
+                          <option value="NONE">Manual (sem telemetria)</option>
+                          <option value="KLIPPER">Klipper / Moonraker (7125)</option>
+                          <option value="OCTOPRINT">OctoPrint (80)</option>
+                          <option value="BAMBU_CLOUD">Bambu Lab (MQTT 8883 — só LAN/Studio)</option>
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[9px] text-[#8BA58D] font-mono uppercase">Chave de API</label>
+                        <input
+                          type="password"
+                          value={editPrinter.apiKey || ''}
+                          onChange={(e) => setEditPrinter({ ...editPrinter, apiKey: e.target.value })}
+                          className="bg-[#151917] border border-[#232B27] focus:border-amber-500 rounded-lg px-2.5 py-1 text-xs text-[#F1F4EE] outline-none font-mono"
+                        />
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onUpdatePrinter(printer.id, {
+                          name: (editPrinter.name || '').trim() || printer.name,
+                          model: (editPrinter.model || '').trim() || printer.model,
+                          ipAddress: (editPrinter.ipAddress || '').trim(),
+                          port: (editPrinter.port || '').trim(),
+                          apiType: editPrinter.apiType,
+                          apiKey: editPrinter.apiKey || '',
+                        });
+                        setPIpAddress((editPrinter.ipAddress || '').trim());
+                        setEditPrinter(null);
+                      }}
+                      className="w-full py-1.5 bg-gradient-to-r from-amber-600 to-amber-500 text-[#0C0E0D] text-[11px] font-black rounded-lg hover:opacity-95 transition"
+                    >
+                      Salvar alterações ✓
+                    </button>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                   <div className="space-y-3">
