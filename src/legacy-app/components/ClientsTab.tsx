@@ -539,13 +539,17 @@ export const ClientsTab: React.FC<ClientsTabProps> = ({
                   <label className="text-[10px] text-[#8BA58D] font-bold uppercase">Interface / Protocolo de Rede</label>
                   <select
                     value={newPrinterApiType}
-                    onChange={(e) => setNewPrinterApiType(e.target.value as any)}
+                    onChange={(e) => {
+                      const t = e.target.value as any;
+                      setNewPrinterApiType(t);
+                      setNewPrinterPort(t === 'OCTOPRINT' ? '80' : t === 'BAMBU_CLOUD' ? '8883' : '7125');
+                    }}
                     className="bg-[#151917] border border-[#232B27] rounded-lg px-2.5 py-1.5 text-xs text-[#F1F4EE] outline-none cursor-pointer"
                   >
                     <option value="NONE">Manual (Sem Telemetria Online)</option>
-                    <option value="KLIPPER">Klipper (API Moonraker)</option>
-                    <option value="OCTOPRINT">OctoPrint API (Marlin / GRBL)</option>
-                    <option value="BAMBU_CLOUD">Bambu Lab Integration Code</option>
+                    <option value="KLIPPER">Klipper / Moonraker (porta 7125)</option>
+                    <option value="OCTOPRINT">OctoPrint API (porta 80)</option>
+                    <option value="BAMBU_CLOUD">Bambu Lab (MQTT 8883 — LAN/Studio)</option>
                   </select>
                 </div>
               </div>
