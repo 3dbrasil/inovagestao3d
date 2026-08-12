@@ -4,7 +4,7 @@ import {
 } from 'lucide-react';
 import { aiProductDraft, olistCreateProduct } from '@/lib/olist.functions';
 import { inovaCreateProduct } from '@/lib/inovastudio.functions';
-import { PriceCalculator } from './PriceCalculator';
+import { PriceCalculator, type FilamentLine } from './PriceCalculator';
 import { safeStorage } from '../../utils/storage';
 import { debitProductionMaterials } from '../../utils/stockDebit';
 import type { CatalogItem } from '../../types';
@@ -19,7 +19,7 @@ type Form = {
   estoqueInicial: string; estoqueMinimo: string; garantia: string; observacoes: string;
   seoTitle: string; seoDescription: string; seoKeywords: string;
   tempoImpressaoHoras: string; pesoFilamentoGramas: string; materialSugerido: string;
-  corFilamento: string;
+  corFilamento: string; tags: string; categoriaMercadoLivre: string; categoriaShopee: string;
 };
 
 const EMPTY: Form = {
@@ -30,7 +30,7 @@ const EMPTY: Form = {
   estoqueInicial: '1', estoqueMinimo: '1', garantia: '90 dias', observacoes: '',
   seoTitle: '', seoDescription: '', seoKeywords: '',
   tempoImpressaoHoras: '', pesoFilamentoGramas: '', materialSugerido: 'PLA',
-  corFilamento: '',
+  corFilamento: '', tags: '', categoriaMercadoLivre: '', categoriaShopee: '',
 };
 
 const n = (v: string) => {
@@ -67,6 +67,7 @@ const Field: React.FC<{
 export const CriarProdutoTab: React.FC = () => {
   const [form, setForm] = useState<Form>(EMPTY);
   const [images, setImages] = useState<string[]>([]);
+  const [filamentLines, setFilamentLines] = useState<FilamentLine[]>([]);
   const [ideia, setIdeia] = useState('');
   const [contexto, setContexto] = useState('');
   const [generating, setGenerating] = useState(false);
@@ -152,6 +153,9 @@ export const CriarProdutoTab: React.FC = () => {
         tempoImpressaoHoras: s(d.tempoImpressaoHoras, f.tempoImpressaoHoras),
         pesoFilamentoGramas: s(d.pesoFilamentoGramas, f.pesoFilamentoGramas),
         materialSugerido: s(d.materialSugerido, f.materialSugerido),
+        tags: Array.isArray(d.tags) ? d.tags.join(', ') : s(d.tags, f.tags),
+        categoriaMercadoLivre: s(d.categoriaMercadoLivre, f.categoriaMercadoLivre),
+        categoriaShopee: s(d.categoriaShopee, f.categoriaShopee),
       }));
       setMsg('Cadastro preenchido pela IA. Revise os campos e envie para a Olist.');
     } catch (e: any) {
