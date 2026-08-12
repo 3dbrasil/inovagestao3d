@@ -754,14 +754,106 @@ export const ClientsTab: React.FC<ClientsTabProps> = ({
                     </h4>
                     <p className="text-[9px] text-[#8BA58D] font-mono mt-0.5">Painel de Instalação &amp; Manutenção Física</p>
                   </div>
-                  <button 
-                    onClick={() => setSelectedPrinterDetails(null)}
-                    type="button"
-                    className="text-[10px] text-red-400 hover:text-red-300 font-bold px-2 py-1 hover:bg-red-500/10 rounded-lg transition shrink-0"
-                  >
-                    Fechar Painel ✕
-                  </button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setEditPrinter(editPrinter ? null : { ...printer })}
+                      className="text-[10px] text-amber-400 hover:text-amber-300 font-bold px-2 py-1 hover:bg-amber-500/10 rounded-lg transition flex items-center gap-1"
+                    >
+                      <Edit3 className="h-3 w-3" /> {editPrinter ? 'Cancelar edição' : 'Editar'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm(`Excluir a impressora "${printer.name}"?`)) {
+                          onDeletePrinter(printer.id);
+                          setSelectedPrinterDetails(null);
+                          setEditPrinter(null);
+                        }
+                      }}
+                      className="text-[10px] text-red-400 hover:text-red-300 font-bold px-2 py-1 hover:bg-red-500/10 rounded-lg transition flex items-center gap-1"
+                    >
+                      <Trash2 className="h-3 w-3" /> Excluir
+                    </button>
+                    <button
+                      onClick={() => { setSelectedPrinterDetails(null); setEditPrinter(null); }}
+                      type="button"
+                      className="text-[10px] text-zinc-400 hover:text-white font-bold px-2 py-1 hover:bg-white/5 rounded-lg transition"
+                    >
+                      Fechar ✕
+                    </button>
+                  </div>
                 </div>
+
+                {editPrinter && (
+                  <div className="p-3 bg-[#111613] rounded-xl border border-amber-500/25 space-y-2.5">
+                    <span className="text-[9.5px] text-amber-400 font-mono uppercase font-black">Editar cadastro da máquina</span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      {([
+                        ['name', 'Apelido'],
+                        ['model', 'Modelo'],
+                        ['ipAddress', 'IP / DNS local'],
+                        ['port', 'Porta (Moonraker 7125 · OctoPrint 80)'],
+                      ] as const).map(([k, label]) => (
+                        <div key={k} className="flex flex-col gap-1">
+                          <label className="text-[9px] text-[#8BA58D] font-mono uppercase">{label}</label>
+                          <input
+                            value={String((editPrinter as any)[k] ?? '')}
+                            onChange={(e) => setEditPrinter({ ...editPrinter, [k]: e.target.value })}
+                            className="bg-[#151917] border border-[#232B27] focus:border-amber-500 rounded-lg px-2.5 py-1 text-xs text-[#F1F4EE] outline-none font-mono"
+                          />
+                        </div>
+                      ))}
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[9px] text-[#8BA58D] font-mono uppercase">Interface</label>
+                        <select
+                          value={editPrinter.apiType || 'NONE'}
+                          onChange={(e) => {
+                            const t = e.target.value as Printer['apiType'];
+                            setEditPrinter({
+                              ...editPrinter,
+                              apiType: t,
+                              port: t === 'OCTOPRINT' ? '80' : t === 'KLIPPER' ? '7125' : t === 'BAMBU_CLOUD' ? '8883' : editPrinter.port,
+                            });
+                          }}
+                          className="bg-[#151917] border border-[#232B27] rounded-lg px-2.5 py-1 text-xs text-[#F1F4EE] outline-none cursor-pointer"
+                        >
+                          <option value="NONE">Manual (sem telemetria)</option>
+                          <option value="KLIPPER">Klipper / Moonraker (7125)</option>
+                          <option value="OCTOPRINT">OctoPrint (80)</option>
+                          <option value="BAMBU_CLOUD">Bambu Lab (MQTT 8883 — só LAN/Studio)</option>
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[9px] text-[#8BA58D] font-mono uppercase">Chave de API</label>
+                        <input
+                          type="password"
+                          value={editPrinter.apiKey || ''}
+                          onChange={(e) => setEditPrinter({ ...editPrinter, apiKey: e.target.value })}
+                          className="bg-[#151917] border border-[#232B27] focus:border-amber-500 rounded-lg px-2.5 py-1 text-xs text-[#F1F4EE] outline-none font-mono"
+                        />
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onUpdatePrinter(printer.id, {
+                          name: (editPrinter.name || '').trim() || printer.name,
+                          model: (editPrinter.model || '').trim() || printer.model,
+                          ipAddress: (editPrinter.ipAddress || '').trim(),
+                          port: (editPrinter.port || '').trim(),
+                          apiType: editPrinter.apiType,
+                          apiKey: editPrinter.apiKey || '',
+                        });
+                        setPIpAddress((editPrinter.ipAddress || '').trim());
+                        setEditPrinter(null);
+                      }}
+                      className="w-full py-1.5 bg-gradient-to-r from-amber-600 to-amber-500 text-[#0C0E0D] text-[11px] font-black rounded-lg hover:opacity-95 transition"
+                    >
+                      Salvar alterações ✓
+                    </button>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                   <div className="space-y-3">
