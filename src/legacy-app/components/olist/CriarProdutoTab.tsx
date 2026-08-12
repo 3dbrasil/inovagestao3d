@@ -457,7 +457,35 @@ export const CriarProdutoTab: React.FC = () => {
             <Field label="Comprimento (cm)" value={form.profundidade} onChange={(v) => set('profundidade', v)} />
             <Field label="Estoque inicial" value={form.estoqueInicial} onChange={(v) => set('estoqueInicial', v)} />
             <Field label="Estoque mínimo" value={form.estoqueMinimo} onChange={(v) => set('estoqueMinimo', v)} />
-            <Field label="Categoria" value={form.categoria} onChange={(v) => set('categoria', v)} />
+            <Field
+              label="Categoria Olist (caminho)"
+              value={form.categoria}
+              onChange={(v) => set('categoria', v)}
+              placeholder="Casa > Organização > Suportes"
+              hint="Caminho completo — a Olist cria a árvore e mapeia nos marketplaces"
+            />
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Field
+              label="Categoria Mercado Livre"
+              value={form.categoriaMercadoLivre}
+              onChange={(v) => set('categoriaMercadoLivre', v)}
+              placeholder="Casa, Móveis e Decoração > ..."
+            />
+            <Field
+              label="Categoria Shopee"
+              value={form.categoriaShopee}
+              onChange={(v) => set('categoriaShopee', v)}
+              placeholder="Casa e Decoração > ..."
+            />
+            <Field
+              label="Tags (separadas por vírgula)"
+              value={form.tags}
+              onChange={(v) => set('tags', v)}
+              placeholder="suporte, impressão 3d, gamer"
+              hint="Vão para a Olist e reforçam as keywords"
+            />
           </div>
 
           <div className="grid gap-3 sm:grid-cols-3">
